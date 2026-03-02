@@ -1,5 +1,3 @@
 {
-    "inv_res_data_serial": [
-        {
-            "Order Number": 192667,
-            "Order Date": 
+    "low_stock_threshold": 5
+}

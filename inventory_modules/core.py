@@ -258,35 +258,47 @@ def add_stock_columns_from_inventory(
         status = "No Match"
         
         # 2. MATCHING LOGIC
-        # Priority 1: Exact Name Match
-        if pl_key and pl_key in inventory:
-            inv_key = pl_key
-            status = "Exact Name Match"
-            if pl_sku:
-                if pl_sku in sku_to_inv_key:
-                   status = "Perfect Match (Name + SKU)" if sku_to_inv_key[pl_sku] == pl_key else f"Name Match (SKU mismatch)"
-                else: status = "Name Match (SKU not in Inv)"
+        is_embroidered_panjabi = pl_key and "embroidered cotton panjabi" in pl_key
         
-        # Priority 2: Strict Normalized SKU Match
-        elif pl_sku and pl_sku in sku_to_inv_key:
-            inv_key = sku_to_inv_key[pl_sku]
-            status = f"SKU Match (Name mismatch -> {inv_key})"
-            
-        # Priority 3: Fuzzy Name Match (Correction for typos)
-        elif pl_key:
-            # We only fuzzy match against non-SKU keys (Title-Size keys)
-            name_keys = [k for k in inventory.keys() if k not in sku_to_inv_key]
-            if name_keys:
-                best_match, score = process.extractOne(pl_key, name_keys)
-                if score >= 85: # Require high confidence for auto-match
-                    inv_key = best_match
-                    status = f"Fuzzy Match ({score}%) -> {best_match}"
+        if is_embroidered_panjabi:
+            if pl_sku and pl_sku in sku_to_inv_key:
+                inv_key = sku_to_inv_key[pl_sku]
+                if pl_key and pl_key in inventory and sku_to_inv_key[pl_sku] == pl_key:
+                    status = "Perfect Match (Name + SKU)"
                 else:
-                    status = f"No Match (Closest: {best_match} @ {score}%)"
+                    status = f"SKU Match (Strict mode for Panjabi -> {inv_key})"
+            else:
+                status = "No Match (Strict SKU required for Embroidered Cotton Panjabi)"
+        else:
+            # Priority 1: Exact Name Match
+            if pl_key and pl_key in inventory:
+                inv_key = pl_key
+                status = "Exact Name Match"
+                if pl_sku:
+                    if pl_sku in sku_to_inv_key:
+                       status = "Perfect Match (Name + SKU)" if sku_to_inv_key[pl_sku] == pl_key else f"Name Match (SKU mismatch)"
+                    else: status = "Name Match (SKU not in Inv)"
+            
+            # Priority 2: Strict Normalized SKU Match
+            elif pl_sku and pl_sku in sku_to_inv_key:
+                inv_key = sku_to_inv_key[pl_sku]
+                status = f"SKU Match (Name mismatch -> {inv_key})"
+                
+            # Priority 3: Fuzzy Name Match (Correction for typos)
+            elif pl_key:
+                # We only fuzzy match against non-SKU keys (Title-Size keys)
+                name_keys = [k for k in inventory.keys() if k not in sku_to_inv_key]
+                if name_keys:
+                    best_match, score = process.extractOne(pl_key, name_keys)
+                    if score >= 85: # Require high confidence for auto-match
+                        inv_key = best_match
+                        status = f"Fuzzy Match ({score}%) -> {best_match}"
+                    else:
+                        status = f"No Match (Closest: {best_match} @ {score}%)"
+                else:
+                    status = "No Match"
             else:
                 status = "No Match"
-        else:
-            status = "No Match"
         
         match_statuses.append(status)
         stock_sources.append(inv_key)
