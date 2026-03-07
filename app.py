@@ -19,6 +19,7 @@ from app_modules.processor import process_orders_dataframe
 from app_modules.wp_processor import WhatsAppOrderProcessor
 from app_modules.error_handler import log_error, get_logs
 from app_modules.persistence import init_state, save_state
+from app_modules.sales_dashboard import render_sales_dashboard
 import core as inv_core
 
 # --- Page Configuration ---
@@ -133,7 +134,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- Tabs ---
-t_dash, t_order, t_inv, t_pick, t_wp, t_logs = st.tabs(["📊 Executive Dashboard", "📦 Pathao Processor", "🏢 Distribution Matrix", "📋 Picking Manifest", "💬 WP Verification", "🛠️ System Logs"])
+t_dash, t_sales, t_order, t_inv, t_pick, t_wp, t_logs = st.tabs(["📊 Executive Dashboard", "💰 Sales Reporter", "📦 Pathao Processor", "🏢 Distribution Matrix", "📋 Picking Manifest", "💬 WP Verification", "🛠️ System Logs"])
 
 # ---------------------------------------------------------
 # TAB 0: EXECUTIVE DASHBOARD
@@ -178,7 +179,13 @@ with t_dash:
         st.info("💡 Run a distribution analysis in the 'Distribution Matrix' tab to populate this dashboard.")
 
 # ---------------------------------------------------------
-# TAB 1: PATHAO ORDER PROCESSOR (With Auto-Repair)
+# TAB 1: SALES REPORTER
+# ---------------------------------------------------------
+with t_sales:
+    render_sales_dashboard()
+
+# ---------------------------------------------------------
+# TAB 2: PATHAO ORDER PROCESSOR (With Auto-Repair)
 # ---------------------------------------------------------
 with t_order:
     st.markdown("### ✨ Pathao Order Processor")
