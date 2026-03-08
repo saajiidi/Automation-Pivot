@@ -3,9 +3,96 @@ import pandas as pd
 import plotly.express as px
 import os
 import json
+import streamlit.components.v1 as components
 from datetime import datetime
 from io import BytesIO
 from urllib.parse import parse_qs, urlparse
+
+def render_snapshot_button(marker_id="snapshot-target"):
+    html_code = """
+    <div style="text-align: right; margin-top: 0px; margin-bottom: 0px;">
+        <button onclick="takeScreenshot()" style="
+            background-color: transparent;
+            color: #4e73df;
+            border: 1px solid #4e73df;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: sans-serif;
+            font-weight: 600;
+            font-size: 13px;
+            transition: all 0.2s;
+        " onmouseover="this.style.backgroundColor='#4e73df'; this.style.color='white';" 
+           onmouseout="this.style.backgroundColor='transparent'; this.style.color='#4e73df';">
+           📸 Save Visual Snapshot
+        </button>
+    </div>
+    <script>
+    function takeScreenshot() {
+        const btn = document.querySelector('button');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = "⏳ Processing...";
+        
+        let targetElement = null;
+        const marker = window.parent.document.getElementById('__MARKER__');
+        if (marker) {
+            targetElement = marker.closest('[data-testid="stVerticalBlock"]');
+        }
+        
+        if (!targetElement) {
+            const modal = window.parent.document.querySelector('[role="dialog"]');
+            const main = window.parent.document.querySelector('[data-testid="stAppViewContainer"]') || window.parent.document.querySelector('.stApp') || window.parent.document.querySelector('.main') || window.parent.document.body;
+            targetElement = modal || main;
+        }
+        
+        if (targetElement) {
+            if (!window.parent.html2canvas) {
+                var script = window.parent.document.createElement('script');
+                script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+                script.onload = function() { capture(targetElement, btn, originalText); };
+                window.parent.document.head.appendChild(script);
+            } else {
+                capture(targetElement, btn, originalText);
+            }
+        } else {
+            btn.innerHTML = "❌ Failed to find target";
+            setTimeout(() => { btn.innerHTML = originalText; }, 3000);
+        }
+    }
+    
+    function capture(element, btn, originalText) {
+        const originalPadding = element.style.padding;
+        const originalBackground = element.style.backgroundColor;
+        
+        element.style.padding = "25px 35px";
+        element.style.backgroundColor = "#ffffff";
+
+        window.parent.html2canvas(element, {
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            scale: 2
+        }).then(canvas => {
+            element.style.padding = originalPadding;
+            element.style.backgroundColor = originalBackground;
+            
+            let link = window.parent.document.createElement('a');
+            link.download = 'Dashboard_Visual_Snapshot.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            
+            btn.innerHTML = "✅ Downloaded Snapshot!";
+            setTimeout(() => { btn.innerHTML = originalText; }, 3000);
+        }).catch(err => {
+            element.style.padding = originalPadding;
+            element.style.backgroundColor = originalBackground;
+            
+            btn.innerHTML = "❌ Error Occurred";
+            setTimeout(() => { btn.innerHTML = originalText; }, 3000);
+        });
+    }
+    </script>
+    """.replace("__MARKER__", marker_id)
+    components.html(html_code, height=40)
 
 # Configuration
 FEEDBACK_DIR = "feedback"
@@ -395,56 +482,118 @@ def load_live_source(source_mode):
     raise ValueError(f"Unsupported source mode: {source_mode}")
 
 
-def render_dashboard_output(drill, summ, top, timeframe, basket, source_name):
-    """Renders common dashboard widgets/charts/tables/export."""
+today_date = datetime.now().strftime("%B %d, %Y")
+@st.dialog(f"🚀 Welcome! Today's Actionable Insights ({today_date})", width="large")
+def show_welcome_popup(summ, basket):
+    st.session_state.has_seen_dashboard_popup = True
     t_qty = summ['Total Qty'].sum()
     t_rev = summ['Total Amount'].sum()
 
-    st.markdown("### 🏆 Core Metrics")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("📦 Items Sold", f"{t_qty:,.0f}")
-    total_orders = basket.get("total_orders", 0)
-    m2.metric("🛍️ Total Orders", f"{total_orders:,.0f}" if total_orders else "-")
-    m3.metric("💸 Revenue", f"TK {t_rev:,.2f}")
-    m4.metric("🏷️ Avg Price", f"TK {(t_rev / t_qty if t_qty > 0 else 0):,.2f}")
+    with st.container():
+        st.markdown('<div id="snapshot-target-popup"></div>', unsafe_allow_html=True)
+        st.markdown("### 🏆 Core Metrics")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("📦 Items Sold", f"{t_qty:,.0f}")
+        total_orders = basket.get("total_orders", 0)
+        m2.metric("🛍️ Total Orders", f"{total_orders:,.0f}" if total_orders else "-")
+        m3.metric("💸 Revenue", f"TK {t_rev:,.2f}")
+        m4.metric("🏷️ Avg Price", f"TK {(t_rev / t_qty if t_qty > 0 else 0):,.2f}")
 
-    st.markdown("### 🛒 Basket Analysis")
-    m5, m6 = st.columns(2)
-    if basket.get("avg_basket_qty", 0) > 0:
-        m5.metric("⚖️ Avg Basket (Qty)", f"{basket['avg_basket_qty']:.2f} items")
-        m6.metric("💰 Avg Basket (TK)", f"TK {basket['avg_basket_value']:,.2f}")
-    else:
-        m5.metric("⚖️ Avg Basket (Qty)", "-")
-        m6.metric("💰 Avg Basket (TK)", "-")
+        st.markdown("### 📈 Visual Analytics")
+        v1, v2 = st.columns(2)
+        with v1:
+            fig_pie = px.pie(
+                summ,
+                values='Total Amount',
+                names='Category',
+                hole=0.6,
+                title='Revenue Share',
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            fig_pie.update_layout(margin=dict(l=20, r=20, t=50, b=20))
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+        with v2:
+            fig_bar = px.bar(
+                summ.sort_values('Total Qty', ascending=False),
+                x='Category',
+                y='Total Qty',
+                color='Category',
+                title='Volume by Category',
+                text_auto='.0f',
+                color_discrete_sequence=px.colors.qualitative.Bold
+            )
+            fig_bar.update_layout(margin=dict(l=20, r=20, t=50, b=20), xaxis_title="", yaxis_title="Quantity Sold")
+            st.plotly_chart(fig_bar, use_container_width=True)
 
-    st.divider()
+    render_snapshot_button("snapshot-target-popup")
 
-    st.markdown("### 📈 Visual Analytics")
-    v1, v2 = st.columns(2)
-    with v1:
-        fig_pie = px.pie(
-            summ,
-            values='Total Amount',
-            names='Category',
-            hole=0.6,
-            title='Revenue Share',
-            color_discrete_sequence=px.colors.qualitative.Pastel
-        )
-        fig_pie.update_layout(margin=dict(l=20, r=20, t=50, b=20))
-        st.plotly_chart(fig_pie, use_container_width=True)
-        
-    with v2:
-        fig_bar = px.bar(
-            summ.sort_values('Total Qty', ascending=False),
-            x='Category',
-            y='Total Qty',
-            color='Category',
-            title='Volume by Category',
-            text_auto='.0f',
-            color_discrete_sequence=px.colors.qualitative.Bold
-        )
-        fig_bar.update_layout(margin=dict(l=20, r=20, t=50, b=20), xaxis_title="", yaxis_title="Quantity Sold")
-        st.plotly_chart(fig_bar, use_container_width=True)
+
+
+
+    if st.button("Close & Continue to Dashboard", use_container_width=True):
+        st.rerun()
+
+def render_dashboard_output(drill, summ, top, timeframe, basket, source_name):
+    """Renders common dashboard widgets/charts/tables/export."""
+    if not st.session_state.get("has_seen_dashboard_popup", False):
+        show_welcome_popup(summ, basket)
+
+    t_qty = summ['Total Qty'].sum()
+    t_rev = summ['Total Amount'].sum()
+
+    with st.container():
+        st.markdown('<div id="snapshot-target-main"></div>', unsafe_allow_html=True)
+        st.markdown("### 🏆 Core Metrics")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("📦 Items Sold", f"{t_qty:,.0f}")
+        total_orders = basket.get("total_orders", 0)
+        m2.metric("🛍️ Total Orders", f"{total_orders:,.0f}" if total_orders else "-")
+        m3.metric("💸 Revenue", f"TK {t_rev:,.2f}")
+        m4.metric("🏷️ Avg Price", f"TK {(t_rev / t_qty if t_qty > 0 else 0):,.2f}")
+
+        st.markdown("### 🛒 Basket Analysis")
+        m5, m6 = st.columns(2)
+        if basket.get("avg_basket_qty", 0) > 0:
+            m5.metric("⚖️ Avg Basket (Qty)", f"{basket['avg_basket_qty']:.2f} items")
+            m6.metric("💰 Avg Basket (TK)", f"TK {basket['avg_basket_value']:,.2f}")
+        else:
+            m5.metric("⚖️ Avg Basket (Qty)", "-")
+            m6.metric("💰 Avg Basket (TK)", "-")
+
+        st.divider()
+
+        st.markdown("### 📈 Visual Analytics")
+        v1, v2 = st.columns(2)
+        with v1:
+            fig_pie = px.pie(
+                summ,
+                values='Total Amount',
+                names='Category',
+                hole=0.6,
+                title='Revenue Share',
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            fig_pie.update_layout(margin=dict(l=20, r=20, t=50, b=20))
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+        with v2:
+            fig_bar = px.bar(
+                summ.sort_values('Total Qty', ascending=False),
+                x='Category',
+                y='Total Qty',
+                color='Category',
+                title='Volume by Category',
+                text_auto='.0f',
+                color_discrete_sequence=px.colors.qualitative.Bold
+            )
+            fig_bar.update_layout(margin=dict(l=20, r=20, t=50, b=20), xaxis_title="", yaxis_title="Quantity Sold")
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+    render_snapshot_button("snapshot-target-main")
+
+
+
 
     st.divider()
     
