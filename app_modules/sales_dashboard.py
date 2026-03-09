@@ -540,8 +540,16 @@ def _render_welcome_popup_content(summ, basket, last_updated="N/A", focus="all")
                     color_discrete_sequence=px.colors.qualitative.Pastel
                 )
                 fig_pie.update_layout(
-                    margin=dict(l=120, r=120, t=50, b=50),
-                    showlegend=False
+                    margin=dict(l=100, r=100, t=30, b=80),
+                    showlegend=True,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="top",
+                        y=-0.1,
+                        xanchor="center",
+                        x=0.5,
+                        font=dict(size=11)
+                    )
                 )
                 fig_pie.update_traces(
                     textposition="outside",
@@ -655,8 +663,16 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source_name, la
                 color_discrete_sequence=px.colors.qualitative.Pastel
             )
             fig_pie.update_layout(
-                margin=dict(l=120, r=120, t=50, b=50),
-                showlegend=False
+                margin=dict(l=100, r=100, t=30, b=80),
+                showlegend=True,
+                legend=dict(
+                    orientation="h",
+                    yanchor="top",
+                    y=-0.1,
+                    xanchor="center",
+                    x=0.5,
+                    font=dict(size=11)
+                )
             )
             fig_pie.update_traces(
                 textposition="outside",
