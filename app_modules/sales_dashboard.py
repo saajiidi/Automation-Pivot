@@ -548,15 +548,23 @@ def _render_welcome_popup_content(summ, basket, last_updated="N/A", focus="all")
 
         if focus in ("all", "visual_analytics"):
             st.subheader("Visual Analytics")
+            
+            sorted_cats = summ.sort_values('Total Amount', ascending=False)['Category'].tolist()
+            color_map = {}
+            for i, cat in enumerate(sorted_cats):
+                val = (i / max(1, len(sorted_cats) - 1)) * 0.85 if len(sorted_cats) > 1 else 0.0
+                color_map[cat] = px.colors.sample_colorscale("Plasma", [val])[0]
+            
             v1, v2 = st.columns(2)
             with v1:
                 fig_pie = px.pie(
                     summ,
                     values='Total Amount',
                     names='Category',
+                    color='Category',
                     hole=0.6,
                     title='Revenue Share',
-                    color_discrete_sequence=px.colors.qualitative.Pastel
+                    color_discrete_map=color_map
                 )
                 fig_pie.update_layout(
                     margin=dict(l=80, r=160, t=40, b=40),
@@ -575,6 +583,8 @@ def _render_welcome_popup_content(summ, basket, last_updated="N/A", focus="all")
                     textinfo="label+percent",
                     textfont_size=11,
                     pull=0.01,
+                    rotation=270,
+                    direction='clockwise'
                 )
                 st.plotly_chart(fig_pie, use_container_width=True, config={"scrollZoom": True, "displayModeBar": True})
                 
@@ -586,7 +596,7 @@ def _render_welcome_popup_content(summ, basket, last_updated="N/A", focus="all")
                     color='Category',
                     title='Volume by Category',
                     text_auto='.0f',
-                    color_discrete_sequence=px.colors.qualitative.Bold
+                    color_discrete_map=color_map
                 )
                 fig_bar.update_layout(
                     margin=dict(l=12, r=12, t=50, b=12),
@@ -671,15 +681,23 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source_name, la
         st.divider()
 
         st.subheader("Visual Analytics")
+        
+        sorted_cats = summ.sort_values('Total Amount', ascending=False)['Category'].tolist()
+        color_map = {}
+        for i, cat in enumerate(sorted_cats):
+            val = (i / max(1, len(sorted_cats) - 1)) * 0.85 if len(sorted_cats) > 1 else 0.0
+            color_map[cat] = px.colors.sample_colorscale("Plasma", [val])[0]
+
         v1, v2 = st.columns(2)
         with v1:
             fig_pie = px.pie(
                 summ,
                 values='Total Amount',
                 names='Category',
+                color='Category',
                 hole=0.6,
                 title='Revenue Share',
-                color_discrete_sequence=px.colors.qualitative.Pastel
+                color_discrete_map=color_map
             )
             fig_pie.update_layout(
                 margin=dict(l=80, r=160, t=40, b=40),
@@ -698,6 +716,8 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source_name, la
                 textinfo="label+percent",
                 textfont_size=11,
                 pull=0.01,
+                rotation=270,
+                direction='clockwise'
             )
             st.plotly_chart(fig_pie, use_container_width=True, config={"scrollZoom": True, "displayModeBar": True})
             
@@ -709,7 +729,7 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source_name, la
                 color='Category',
                 title='Volume by Category',
                 text_auto='.0f',
-                color_discrete_sequence=px.colors.qualitative.Bold
+                color_discrete_map=color_map
             )
             fig_bar.update_layout(
                 margin=dict(l=12, r=12, t=50, b=12),
