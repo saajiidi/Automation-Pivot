@@ -1,10 +1,10 @@
 import pandas as pd
 import streamlit as st
 
-from app_modules.error_handler import log_error
-from app_modules.io_utils import read_uploaded_file
-from app_modules.persistence import clear_state_keys
-from app_modules.ui_components import (
+from src.core.errors import log_error
+from src.utils.io import read_uploaded_file
+from src.core.persistence import clear_state_keys
+from src.ui.components import (
     render_action_bar,
     render_file_summary,
     render_reset_confirm,
@@ -12,7 +12,7 @@ from app_modules.ui_components import (
     section_card,
     to_excel_bytes,
 )
-from app_modules.wp_processor import WhatsAppOrderProcessor
+from src.engine.wp_processor import WhatsAppOrderProcessor
 
 FUZZY_REQUIRED_FIELDS = {
     "phone": ["phone", "mobile", "contact", "billing phone"],
@@ -70,10 +70,9 @@ def render_wp_tab(guided: bool = True):
 
     c1, c2 = st.columns([1, 1])
     with c1:
-        if st.button("📡 Sync from Live Stream", use_container_width=True):
-            from app_modules.sales_dashboard import load_data_from_last_day_sales
-            load_data_from_last_day_sales.clear()
-            df_sync, _, _ = load_data_from_last_day_sales()
+        if st.button("📡 Sync from Live Stream", use_container_width=True, key="ec_sync_btn"):
+            from src.modules.sales import load_shared_gsheet
+            df_sync, _, _ = load_shared_gsheet()
             st.session_state.wp_preview_df = df_sync
             st.session_state.wp_upload_name = "LiveSync_LastDaySales"
             st.rerun()
@@ -125,7 +124,7 @@ def render_wp_tab(guided: bool = True):
         st.dataframe(links_df.head(50), use_container_width=True, hide_index=True)
         c1, c2 = st.columns(2)
         bulk_text = "\n\n".join([f"TO: {r['UID']}\n{r['whatsapp_link']}" for _, r in links_df.iterrows()])
-        c1.download_button("💾 Export Text", bulk_text, "Bulk_Messages.txt")
-        c2.download_button("📉 Download Excel", to_excel_bytes(links_df), "WhatsApp_Links.xlsx")
+        c1.download_button("💾 Export Text", bulk_text, "Bulk_Messages.txt", key="ec_ex_text")
+        c2.download_button("📉 Download Excel", to_excel_bytes(links_df), "WhatsApp_Links.xlsx", key="ec_ex_xl")
 
     render_reset_confirm("wp", _reset_wp_state)

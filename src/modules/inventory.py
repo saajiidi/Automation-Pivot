@@ -3,20 +3,20 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from app_modules.error_handler import log_error
-from app_modules.io_utils import read_uploaded_file
-from app_modules.persistence import clear_state_keys, save_state
-from app_modules.ui_components import (
+from src.core.errors import log_error
+from src.utils.io import read_uploaded_file
+from src.core.persistence import clear_state_keys, save_state
+from src.ui.components import (
     render_action_bar,
     render_reset_confirm,
     render_steps,
     section_card,
     render_mini_uploader,
 )
-from app_modules.data_sync import load_shared_gsheet, clear_sync_cache
-from app_modules.ui_config import INVENTORY_LOCATIONS
-from app_modules.utils import find_columns
-from inventory_modules import core as inv_core
+from src.core.sync import load_shared_gsheet, clear_sync_cache
+from src.ui.config import INVENTORY_LOCATIONS
+from src.utils.data import find_columns
+from src.engine.inventory import core as inv_core
 
 def _reset_inventory_state():
     clear_state_keys(["inv_res_data", "inv_active_l", "inv_t_col", "inv_master_df", "inv_master_name"])
@@ -34,7 +34,7 @@ def render_distribution_tab(search_q, guided: bool = True):
     with m_tab:
         c_sync1, c_sync2 = st.columns([1, 1])
         with c_sync1:
-            if st.button("📡 Sync Master Stock", use_container_width=True):
+            if st.button("📡 Sync Master Stock", use_container_width=True, key="inv_sync_btn"):
                 try:
                     clear_sync_cache()
                     df_sync, source_name, _ = load_shared_gsheet("LastDaySales")
@@ -46,7 +46,7 @@ def render_distribution_tab(search_q, guided: bool = True):
             master_file = st.file_uploader("Master Stock List", type=["xlsx", "csv"], key="inv_up", label_visibility="collapsed")
 
         # Outlet Overrides (Mini Icons)
-        st.markdown("<div style='margin-top:20px; text-align:center;'><b>Outlet Stock Overrides</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top:30px; text-align:center; font-family:JetBrains Mono; color:var(--text-secondary); letter-spacing:0.2em; font-size:0.8rem;'>▼ OUTLET STOCK COMMAND</div>", unsafe_allow_html=True)
         loc_files = {}
         cols = st.columns(len(INVENTORY_LOCATIONS))
         for i, loc in enumerate(INVENTORY_LOCATIONS):
@@ -99,8 +99,8 @@ def render_distribution_tab(search_q, guided: bool = True):
                 tc = st.session_state.inv_t_col
                 res_df = res_df[res_df[tc].astype(str).str.lower().str.contains(search_q.lower(), na=False)]
             st.dataframe(res_df, use_container_width=True, hide_index=True)
-            from app_modules.ui_components import to_excel_bytes
-            st.download_button("Download distribution report", to_excel_bytes(res_df), "Stock_Distribution.xlsx", type="primary")
+            from src.ui.components import to_excel_bytes
+            st.download_button("Download distribution report", to_excel_bytes(res_df), "Stock_Distribution.xlsx", type="primary", key="inv_ex_btn")
 
     with i_tab:
         if st.session_state.get("inv_res_data") is not None:

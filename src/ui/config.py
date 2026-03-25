@@ -1,4 +1,4 @@
-APP_TITLE = "Automation Hub Pro"
+APP_TITLE = "Automation Pivot"
 APP_VERSION = "v8.1"
 
 PRIMARY_NAV = [

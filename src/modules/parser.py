@@ -1,4 +1,4 @@
-﻿import re
+import re
 from io import BytesIO
 from datetime import datetime
 
@@ -260,8 +260,8 @@ def df_to_excel_bytes(df: pd.DataFrame) -> bytes:
 
 
 
-from app_modules.persistence import clear_state_keys
-from app_modules.ui_components import (
+from src.core.persistence import clear_state_keys
+from src.ui.components import (
     render_action_bar,
     render_reset_confirm,
     render_steps,
@@ -339,6 +339,7 @@ POD"""
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 width="stretch",
                 type="primary",
+                key="parser_std_dl"
             )
 
     with tab2:
@@ -389,6 +390,7 @@ POD"""
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 width="stretch",
                 type="primary",
+                key="parser_fuz_dl"
             )
 
     render_reset_confirm("parser", _reset_parser_state)

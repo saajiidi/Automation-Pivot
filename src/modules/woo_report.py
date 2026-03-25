@@ -8,8 +8,8 @@ import plotly.express as px
 import requests
 import streamlit as st
 
-from app_modules.error_handler import log_error
-from app_modules.ui_components import section_card
+from src.core.errors import log_error
+from src.ui.components import section_card
 
 
 DEFAULT_WP_ORDERS_SITE_URL = "https://deencommerce.com/"
@@ -40,7 +40,7 @@ WP_API_ORDERS_USER_ACCESS_KEY = "wp_api_orders_user_access"
 
 
 def get_wp_api_orders_tab_label():
-    return "WooCommerce Orders"
+    return "🌐 WooCommerce Orders"
 
 
 def build_wp_api_orders_endpoint(site_url: str, endpoint_path: str) -> str:

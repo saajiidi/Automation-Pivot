@@ -11,6 +11,8 @@ from datetime import datetime
 DEFAULT_GSHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTBDukmkRJGgHjCRIAAwGmlWaiPwESXSp9UBXm3_sbs37bk2HxavPc62aobmL1cGWUfAKE4Zd6yJySO/pubhtml"
 PUBLISHED_SHEET_TAB_RE = re.compile(r'items\.push\(\{name:\s*"([^"]+)",\s*pageUrl:\s*"([^"]+)",\s*gid:\s*"([^"]+)"', re.IGNORECASE)
 
+from src.utils.io import read_remote_csv
+
 def _get_setting(key, default=None):
     try:
         if key in st.secrets: return st.secrets[key]
@@ -33,18 +35,6 @@ def normalize_gsheet_url_to_csv(sheet_url, gid=None):
             return f"https://docs.google.com/spreadsheets/d/{sid}/export?format=csv&gid={resolved_gid}"
     return url
 
-def _read_csv_with_last_modified(csv_url):
-    req = Request(csv_url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(req) as resp:
-        raw = resp.read()
-        lm = resp.headers.get("Last-Modified")
-    df = pd.read_csv(BytesIO(raw))
-    if lm:
-        try: lm = parsedate_to_datetime(lm).strftime("%Y-%m-%d %H:%M:%S")
-        except: lm = "Live Sync"
-    else: lm = "Snapshot"
-    return df, lm
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_published_sheet_tabs(sheet_url):
     req = Request(sheet_url, headers={"User-Agent": "Mozilla/5.0"})
@@ -60,10 +50,10 @@ def load_shared_gsheet(target_tab_name="LastDaySales"):
     """Modular loader for sharing Google Sheet data across all app modules."""
     sheet_url = _get_setting("GSHEET_URL", DEFAULT_GSHEET_URL)
     tabs = load_published_sheet_tabs(sheet_url)
-    target = next((t for t in tabs if t["name"] == target_tab_name), tabs[0] if tabs else None)
-    if not target: raise ValueError("No active worksheets found.")
+    target = next((t for t in tabs if t["name"].lower() == target_tab_name.lower()), tabs[0] if tabs else None)
+    if not target: raise ValueError(f"Target tab '{target_tab_name}' not found.")
     csv_url = normalize_gsheet_url_to_csv(sheet_url, gid=target["gid"])
-    df, lm = _read_csv_with_last_modified(csv_url)
+    df, lm = read_remote_csv(csv_url)
     return df, target["name"], lm
 
 def clear_sync_cache():

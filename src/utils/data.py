@@ -1,32 +1,46 @@
 import re
 import pandas as pd
 from datetime import date, datetime, timedelta, timezone
-from app_modules.categories import get_category_for_orders
+from src.core.categories import get_category_for_orders
 
 def find_columns(df):
-    """Detects primary columns using exact and then partial matching."""
+    """Detects primary columns using exact and then partial matching with expanded aliases."""
     mapping = {
-        'name': ['item name', 'product name', 'product', 'item', 'title', 'description', 'name'],
-        'cost': ['item cost', 'price', 'unit price', 'cost', 'rate', 'mrp', 'selling price'],
-        'qty': ['quantity', 'qty', 'units', 'sold', 'count', 'total quantity'],
-        'date': ['date', 'order date', 'month', 'time', 'created at'],
-        'order_id': ['order id', 'order #', 'invoice number', 'invoice #', 'order number', 'transaction id', 'id'],
-        'phone': ['phone', 'contact', 'mobile', 'cell', 'phone number', 'customer phone'],
-        'email': ['email', 'customer email', 'email address', 'e-mail']
+        'name': ['item name', 'product name', 'product', 'item', 'title', 'description', 'name', 'internal_name'],
+        'cost': ['item cost', 'price', 'unit price', 'cost', 'rate', 'mrp', 'selling price', 'total', 'internal_cost', 'line_total'],
+        'qty': ['quantity', 'qty', 'units', 'sold', 'count', 'total quantity', 'internal_qty'],
+        'date': ['date', 'order date', 'month', 'time', 'created at', 'date_created', 'date_paid'],
+        'order_id': ['order id', 'order #', 'invoice number', 'invoice #', 'order number', 'transaction id', 'id', 'number'],
+        'phone': ['phone', 'contact', 'mobile', 'cell', 'phone number', 'customer phone', 'billing.phone'],
+        'email': ['email', 'customer email', 'email address', 'e-mail', 'billing.email']
     }
     found = {}
     actual_cols = [c.strip() for c in df.columns]
     lower_cols = [c.lower() for c in actual_cols]
+    
+    # Priority 1: Exact mapping
     for key, aliases in mapping.items():
         for alias in aliases:
             if alias in lower_cols:
-                idx = lower_cols.index(alias); found[key] = actual_cols[idx]; break
+                idx = lower_cols.index(alias)
+                found[key] = actual_cols[idx]
+                break
+                
+    # Priority 2: Fuzzy mapping
     for key, aliases in mapping.items():
         if key not in found:
             for col, l_col in zip(actual_cols, lower_cols):
                 if any(alias in l_col for alias in aliases):
-                    found[key] = col; break
+                    found[key] = col
+                    break
     return found
+
+def pick_column(df: pd.DataFrame, candidates: list[str]) -> str:
+    """Returns the first existing column from a list of candidates."""
+    for col in candidates:
+        if col in df.columns:
+            return col
+    return ""
 
 def parse_dates(values: pd.Series) -> pd.Series:
     """Parse mixed order-date formats while keeping failed values as NaT."""

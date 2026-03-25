@@ -1,9 +1,9 @@
 import streamlit as st
-from app_modules.error_handler import log_error
-from app_modules.io_utils import read_uploaded_file
-from app_modules.persistence import clear_state_keys, save_state
-from app_modules.processor import process_orders_dataframe
-from app_modules.ui_components import (
+from src.core.errors import log_error
+from src.utils.io import read_uploaded_file
+from src.core.persistence import clear_state_keys, save_state
+from src.engine.processor import process_orders_dataframe
+from src.ui.components import (
     render_action_bar,
     render_file_summary,
     render_reset_confirm,
@@ -11,8 +11,8 @@ from app_modules.ui_components import (
     section_card,
     to_excel_bytes,
 )
-from app_modules.data_sync import load_shared_gsheet, clear_sync_cache
-from app_modules.utils import find_columns
+from src.core.sync import load_shared_gsheet, clear_sync_cache
+from src.utils.data import find_columns
 
 REQUIRED_COLUMNS = ["Phone (Billing)"]
 

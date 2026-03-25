@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="Automation Hub Pro",
+    page_title="Automation Pivot",
     page_icon="AH",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -10,35 +10,35 @@ st.set_page_config(
 
 def run_app():
     # Lazy imports keep bootstrap resilient on cloud when a module has runtime incompatibilities.
-    from app_modules.ai_chat import render_ai_chat_tab
-    from app_modules.bike_animation import render_bike_animation
-    from app_modules.distribution_tab import render_distribution_tab
-    from app_modules.error_handler import get_logs, log_error
-    from app_modules.fuzzy_parser_tab import render_fuzzy_parser_tab
-    from app_modules.more_tools import (
+    from src.modules.ai import render_ai_chat_tab
+    from src.ui.animations import render_bike_animation
+    from src.modules.inventory import render_distribution_tab
+    from src.core.errors import get_logs, log_error
+    from src.modules.parser import render_fuzzy_parser_tab
+    from src.modules.tools import (
         render_daily_summary_export_tab,
         render_data_quality_monitor_tab,
     )
-    from app_modules.pathao_tab import render_pathao_tab
-    from app_modules.persistence import init_state, save_state
-    from app_modules.sales_dashboard import (
+    from src.modules.logistics import render_pathao_tab
+    from src.core.persistence import init_state, save_state
+    from src.modules.sales import (
         get_custom_report_tab_label,
         render_custom_period_tab,
         render_live_tab,
     )
-    from app_modules.wp_api_orders_report import (
+    from src.modules.woo_report import (
         get_wp_api_orders_tab_label,
         render_wp_api_orders_tab,
     )
-    from app_modules.ui_components import (
+    from src.ui.components import (
         inject_base_styles,
         render_header,
         sample_file_download,
         section_card,
     )
-    from app_modules.ui_config import PRIMARY_NAV
-    from app_modules.whatsapp_api import render_whatsapp_api_tab
-    from app_modules.wp_tab import render_wp_tab
+    from src.ui.config import PRIMARY_NAV
+    from src.modules.whatsapp import render_whatsapp_api_tab
+    from src.modules.ecommerce import render_wp_tab
 
     init_state()
     inject_base_styles()
@@ -60,52 +60,47 @@ def run_app():
 
     render_header()
 
-    # Optimized Command Center Navigation (Total Sales Report promoted to 2nd slot)
-    # 0=Live, 1=Sales, 2=Orders, 3=Inv, 4=Pulse, 5=WA, 6=Woo
+    # Optimized Command Center Navigation
     primary_nav = [
         "📡 Live Stream",
         get_custom_report_tab_label(),
-        "📦 Orders",
-        "🏠 Inventory",
         "👥 Customer Pulse",
+        "🚛 Orders & Logistics",
+        "🏠 InventoryHub",
         "💬 WhatsApp",
         get_wp_api_orders_tab_label()
     ]
     tabs = st.tabs(primary_nav)
 
     # 0. 📡 LIVE STREAM DASHBOARD
-    with tabs[0]:
-        render_live_tab()
+    with tabs[0]: render_live_tab()
 
-    # 1. 📂 TOTAL SALES (HISTORICAL & CUSTOM PERIODS)
-    with tabs[1]:
-        render_custom_period_tab()
+    # 1. 📂 TOTAL SALES (HISTORICAL)
+    with tabs[1]: render_custom_period_tab()
 
-    # 2. 🚛 LOGISTICS & ORDERS
+    # 2. 👥 CUSTOMER PULSE
     with tabs[2]:
+        from src.modules.sales import render_customer_pulse_tab
+        render_customer_pulse_tab()
+
+    # 3. 🚛 LOGISTICS & ORDERS
+    with tabs[3]:
         o_p, o_f = st.tabs(["🚚 Pathao Processor", "🔍 Delivery Text Parser"])
         with o_p: render_pathao_tab(guided=False)
         with o_f: render_fuzzy_parser_tab(guided=False)
 
-    # 3. 📦 INVENTORY HUB
-    with tabs[3]:
+    # 4. 📦 INVENTORY HUB
+    with tabs[4]:
         render_distribution_tab(
             search_q=st.session_state.get("inv_matrix_search", ""),
             guided=False,
         )
 
-    # 4. 👥 CUSTOMER PULSE
-    with tabs[4]:
-        from app_modules.sales_dashboard import render_customer_pulse_tab
-        render_customer_pulse_tab()
-
     # 5. ☎️ WHATSAPP CHANNEL
-    with tabs[5]:
-        render_wp_tab(guided=False)
+    with tabs[5]: render_wp_tab(guided=False)
 
     # 6. 🌐 WOOCOMMERCE SYNC
-    with tabs[6]:
-        render_wp_api_orders_tab()
+    with tabs[6]: render_wp_api_orders_tab()
 
     # ➕ UTILITY DRAWER
     with st.expander("🛠️ ADVANCED UTILITIES", expanded=False):
@@ -129,7 +124,7 @@ try:
     run_app()
 except Exception as exc:
     # Failsafe to prevent full redacted crash pages on Streamlit Cloud.
-    from app_modules.error_handler import log_error
+    from src.core.errors import log_error
 
     log_error(exc, context="App Bootstrap")
     st.error("Application failed to render. Check 'More Tools -> System Logs' for details.")

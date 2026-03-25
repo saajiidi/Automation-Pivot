@@ -1,8 +1,8 @@
 
 import pandas as pd
-from app_modules.categories import get_category_for_orders
-from app_modules.zones import KNOWN_ZONES
-from app_modules.utils import normalize_city_name, extract_best_zone, format_address_logic
+from src.core.categories import get_category_for_orders
+from src.core.zones import KNOWN_ZONES
+from src.utils.data import normalize_city_name, extract_best_zone, format_address_logic
 
 def clean_dataframe(df):
     """

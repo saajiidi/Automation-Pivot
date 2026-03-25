@@ -5,7 +5,7 @@ import tempfile
 import logging
 import json
 
-from app_modules.paths import DATA_DIR, STATE_FILE, prepare_data_dirs
+from src.core.paths import DATA_DIR, STATE_FILE, prepare_data_dirs
 
 prepare_data_dirs()
 

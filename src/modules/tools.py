@@ -5,10 +5,10 @@ from io import BytesIO
 import pandas as pd
 import streamlit as st
 
-from app_modules.categories import get_category_for_sales
-from app_modules.sales_dashboard import find_columns
-from app_modules.io_utils import read_uploaded_file
-from app_modules.ui_components import render_action_bar, section_card
+from src.core.categories import get_category_for_sales
+from src.modules.sales import find_columns
+from src.utils.io import read_uploaded_file
+from src.ui.components import render_action_bar, section_card
 
 
 def _digits_only(v):
@@ -114,6 +114,7 @@ def render_data_quality_monitor_tab():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         width="stretch",
         type="primary",
+        key="tools_dq_dl"
     )
 
 
@@ -218,4 +219,5 @@ def render_daily_summary_export_tab():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         width="stretch",
         type="primary",
+        key="tools_exec_dl"
     )

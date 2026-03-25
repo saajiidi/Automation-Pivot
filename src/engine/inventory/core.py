@@ -5,7 +5,7 @@ from typing import Dict, Tuple, Optional
 import pandas as pd
 from rapidfuzz import process as rf_process
 
-from app_modules.io_utils import read_uploaded_file
+from src.utils.io import read_uploaded_file
 
 
 def normalize_key(val) -> str:

@@ -5,7 +5,7 @@ import traceback
 import tempfile
 import logging
 
-from app_modules.paths import DATA_DIR, ERROR_LOG_FILE, prepare_data_dirs
+from src.core.paths import DATA_DIR, ERROR_LOG_FILE, prepare_data_dirs
 
 prepare_data_dirs()
 
