@@ -109,29 +109,37 @@ def process_data(df, selected_cols):
         )
         drill.columns = ["Category", "Price (TK)", "Total Qty", "Total Amount"]
 
-        # 👑 Top Spenders (Customers)
+        # 🥇 Product Rankings (The requested report style)
+        top_products = (
+            df.groupby("Internal_Name")
+            .agg({"Internal_Qty": "sum", "Total Amount": "sum", "Category": "first"})
+            .reset_index()
+        )
+        top_products.columns = [
+            "Product Name",
+            "Total Qty",
+            "Total Amount",
+            "Category",
+        ]
+        top_products = top_products.sort_values("Total Amount", ascending=False)
+
+        # 👥 Customer Highlights (Optional)
+        top_customers = None
         if (
             "Internal_Customer" in df.columns
             and (df["Internal_Customer"] != "N/A").any()
         ):
-            top = (
+            top_customers = (
                 df.groupby("Internal_Customer")
                 .agg({"Total Amount": "sum", "Internal_Qty": "sum"})
                 .reset_index()
             )
-            top.columns = ["Customer Name", "Total Spent", "Items Purchased"]
-        else:
-            # Fallback to Top Products if customer names aren't detectable
-            top = (
-                df.groupby("Internal_Name")
-                .agg(
-                    {"Internal_Qty": "sum", "Total Amount": "sum", "Category": "first"}
-                )
-                .reset_index()
-            )
-            top.columns = ["Product Name", "Total Qty", "Total Amount", "Category"]
-
-        top = top.sort_values(top.columns[1], ascending=False)
+            top_customers.columns = [
+                "Customer Name",
+                "Total Spent",
+                "Items Purchased",
+            ]
+            top_customers = top_customers.sort_values("Total Spent", ascending=False)
 
         bk = {"avg_basket_qty": 0, "avg_basket_value": 0, "total_orders": 0}
         gc = [
@@ -147,10 +155,10 @@ def process_data(df, selected_cols):
                 "total_orders": len(og),
             }
 
-        return drill, summ, top, tf, bk
+        return drill, summ, top_products, tf, bk, df, top_customers
     except Exception as e:
         log_system_event("CALC_ERROR", str(e))
-        return None, None, None, "", {}
+        return None, None, None, "", {}, None, None
 
 
 def render_story_summary(summ, tp, timeframe, bk):
@@ -184,7 +192,7 @@ def render_story_summary(summ, tp, timeframe, bk):
 # --- UI RENDERING ---
 
 
-def render_dashboard_output(drill, summ, top, timeframe, basket, source, updated):
+def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=None):
     render_story_summary(summ, top, timeframe, basket)
     st.markdown(f"### ⚡ Statement: {timeframe or 'All Records'}")
     from src.ui.components import render_metric_hud
@@ -200,6 +208,36 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source, updated
         )
     with c4:
         render_metric_hud("Avg Basket", f"TK {basket['avg_basket_value']:,.0f}", "🛍️")
+
+    # 📥 EXCEL EXPORT (Relocated to top to avoid confusion with page footer)
+    try:
+        from io import BytesIO
+
+        buf = BytesIO()
+        with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+            sm.to_excel(writer, sheet_name="Summary", index=False)
+            top_prod.to_excel(writer, sheet_name="Product Rankings", index=False)
+            dr.to_excel(writer, sheet_name="Drilldown", index=False)
+            if top_cust is not None:
+                top_cust.to_excel(writer, sheet_name="VIP Pulse", index=False)
+            df.head(500).to_excel(writer, sheet_name="Sample Raw Data", index=False)
+
+        clean_source = str(src).replace(" ", "_") if src else "Report"
+        clean_tf = str(tf).replace("/", "-") if tf else "Overview"
+        final_filename = f"Report_{clean_source}_{clean_tf}.xlsx"
+
+        st.download_button(
+            label="📥 Export Analysis to Excel",
+            data=buf.getvalue(),
+            file_name=final_filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key=f"dl_{src}_{tf}",
+        )
+    except Exception as e:
+        st.info(f"💡 Export engine standby. ({e})")
+
+    st.divider()
 
     is_dark = st.session_state.get("app_theme", "Dark Mode") == "Dark Mode"
     color_scale = "Blues_r" if is_dark else "Plasma"
@@ -246,7 +284,9 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source, updated
         )
 
     # Analytics Tabs (Replaces "Detailed Product Breakdown" expander)
-    analysis_tabs = st.tabs(["📑 Summary", "🏆 Rankings", "🔍 Drilldown"])
+    analysis_tabs = st.tabs(
+        ["📑 Summary", "🏆 Product Rankings", "🔍 Drilldown", "💎 VIP Pulse"]
+    )
 
     with analysis_tabs[0]:
         st.dataframe(
@@ -257,17 +297,58 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source, updated
 
     with analysis_tabs[1]:
         st.dataframe(
-            top.head(20),
+            top_prod.head(20),
             use_container_width=True,
             hide_index=True,
         )
 
     with analysis_tabs[2]:
-        st.dataframe(
-            drill.sort_values(["Category", "Price (TK)"]),
-            use_container_width=True,
-            hide_index=True,
-        )
+        st.markdown("### 🔍 Category Inspector")
+        if not dr.empty:
+            categories = ["All Categories"] + sorted(dr["Category"].unique().tolist())
+            selected_cat = st.selectbox(
+                "Filter Drilldown by Category",
+                categories,
+                key=f"drill_sel_{src}_{tf}",
+            )
+
+            display_drill = dr
+            if selected_cat != "All Categories":
+                display_drill = dr[dr["Category"] == selected_cat]
+
+            st.dataframe(
+                display_drill.sort_values(["Category", "Price (TK)"]),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("No drilldown data available.")
+
+    with analysis_tabs[3]:
+        if top_cust is not None:
+            st.dataframe(top_cust.head(20), use_container_width=True, hide_index=True)
+        else:
+            st.info("Customer-specific data not found in this segment.")
+
+    # 🔎 GLOBAL SEARCH (Matches Catwise Raw Data Search)
+    with st.expander("🔎 Deep Search & Raw Data Explorer"):
+        search_query = st.text_input(
+            "Search for products, orders, or customers...",
+            key=f"search_{src}_{tf}",
+        ).lower()
+        if search_query:
+            # Search across all string columns
+            mask = (
+                df.astype(str)
+                .apply(lambda x: x.str.contains(search_query, case=False, na=False))
+                .any(axis=1)
+            )
+            results = df[mask]
+            st.success(f"Found {len(results)} matches.")
+            st.dataframe(results, use_container_width=True)
+        else:
+            st.caption("Showing first 20 records. Use the search box above to filter.")
+            st.dataframe(df.head(20), use_container_width=True)
 
 
 # --- TABS ---
@@ -283,8 +364,9 @@ def render_live_tab():
     try:
         df, src, upd = load_shared_gsheet("LastDaySales")
         mc = find_columns(df)
-        dr, sm, tp, tf, bk = process_data(df, mc)
-        render_dashboard_output(dr, sm, tp, tf, bk, src, upd)
+        dr, sm, tp, tf, bk, df, tc = process_data(df, mc)
+        if df is not None:
+            render_dashboard_output(df, dr, sm, tp, tf, bk, src, upd, top_cust=tc)
     except Exception as e:
         st.error(f"Live sync error: {e}")
 
@@ -439,8 +521,19 @@ def render_custom_period_tab():
             "phone": "_p_phone",
             "email": "_p_email",
         }
-        dr, sm, tp, tf, bk = process_data(filtered, mc)
-        render_dashboard_output(dr, sm, tp, tf, bk, "MasterDB", "Incremental Load")
+        dr, sm, tp, tf, bk, filtered_df, tc = process_data(filtered, mc)
+        if filtered_df is not None:
+            render_dashboard_output(
+                filtered_df,
+                dr,
+                sm,
+                tp,
+                tf,
+                bk,
+                "MasterDB",
+                "Incremental Load",
+                top_cust=tc,
+            )
     else:
         st.error("Date column not found in database to support period filtering.")
 
