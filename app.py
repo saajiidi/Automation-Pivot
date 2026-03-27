@@ -39,7 +39,7 @@ def run_app():
         st.markdown("""
             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 2rem;">
                 <a href="https://deencommerce.com" target="_blank">
-                    <img src="https://cdn.brandfetch.io/deencommerce.com" width="45" style="border-radius: 8px;">
+                    <img src="https://raw.githubusercontent.com/saajiidi/Inventory-Distribution-Manager/main/assets/logo.png" width="45" style="border-radius: 8px;">
                 </a>
                 <div>
                     <div style="font-size: 0.75rem; font-weight: 700; color: #2563eb; letter-spacing: 0.1em; text-transform: uppercase;">OPS COMMAND</div>

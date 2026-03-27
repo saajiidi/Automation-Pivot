@@ -696,14 +696,18 @@ def render_customer_pulse_core(db):
     accent_color = "#3b82f6" if is_dark else "#1d4ed8"
     text_color = "#f8fafc" if is_dark else "#0f172a"
 
+    # Advanced Calculations
+    avg_orders = db.groupby("UID")["_p_order"].nunique().mean()
+    last_orders = db.groupby("UID")["_p_date"].max()
+    avg_recency = (pd.Timestamp.now() - last_orders).dt.days.mean()
+
     story = f"""
     <div style="background: rgba(59, 130, 246, 0.08); border-left: 5px solid {accent_color}; padding: 1.5rem; border-radius: 4px 20px 20px 4px; margin-bottom: 2.5rem; font-family: 'Outfit';">
         <div style="color: {accent_color}; font-weight: 800; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.15em; margin-bottom: 0.75rem;">🛰️ CUSTOMER BASE INTELLIGENCE</div>
         <div style="font-size: 1.15rem; color: {text_color}; line-height: 1.6; font-weight: 400;">
-            Currently tracking <b>{unique_customers:,} unique customers</b> within the selected window. 
-            The ecosystem demonstrates a <b>{retention_rate:.1f}% retention rate</b>, with returning loyals driving sustainable growth. 
-            On average, each customer represents a lifetime value (CLV) of <b>TK {avg_clv:,.0f}</b>. 
-            The high retention suggests a strong product-market fit, while the acquisition trend indicates active scalability.
+            Monitoring <b>{unique_customers:,} unique customers</b>. 
+            On average, active users interact every <b>{int(avg_recency or 0)} days</b> with a loyalty frequency of <b>{avg_orders:.1f} orders</b> per customer. 
+            The ecosystem demonstrates a <b>{retention_rate:.1f}% retention rate</b>, generating an average lifetime value of <b>TK {avg_clv:,.0f}</b>.
         </div>
     </div>
     """
@@ -716,10 +720,17 @@ def render_customer_pulse_core(db):
     with m1:
         render_metric_hud("Unique Pulse", f"{unique_customers:,}", "👥")
     with m2:
-        render_metric_hud("Retention Rate", f"{retention_rate:.1f}%", "🔄")
+        render_metric_hud("Order Frequency", f"{avg_orders:.1f}x", "🛒")
     with m3:
-        render_metric_hud("Avg CLV", f"TK {avg_clv:,.0f}", "💎")
+        render_metric_hud("Avg Recency", f"{int(avg_recency or 0)} Days", "🕒")
     with m4:
+        render_metric_hud("Retention Rate", f"{retention_rate:.1f}%", "🔄")
+
+    # Secondary HUD
+    c1, c2 = st.columns(2)
+    with c1:
+        render_metric_hud("Avg CLV", f"TK {avg_clv:,.0f}", "💎")
+    with c2:
         render_metric_hud("Loyalists", f"{returning_count:,}", "🏆")
 
     # Visual Insights
@@ -876,6 +887,19 @@ def render_cache_health_panel():
     if cache_data:
         st.table(pd.DataFrame(cache_data))
     
+    if st.button("💾 Export Current Pivot to Local CSVs", use_container_width=True, help="Dumps all cached data into Excel-readable files in your 'incoming' folder"):
+        from src.core.paths import INCOMING_DIR
+        try:
+            # Export the master snapshot
+            if not master_df.empty:
+                csv_path = INCOMING_DIR / f"pivot_snapshot_{datetime.now().strftime('%Y%m%d')}.csv"
+                master_df.to_csv(csv_path, index=False)
+                st.success(f"Pivot snapshot secured: {csv_path.name}")
+            else:
+                st.warning("Database is currently empty. Sync first.")
+        except Exception as e:
+            st.error(f"Native export failed: {e}")
+
     if st.button("🗑️ Wipe All Local Cache", type="secondary"):
         from src.core.sync import clear_sync_cache
         clear_sync_cache()
