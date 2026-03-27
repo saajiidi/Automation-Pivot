@@ -36,17 +36,18 @@ def run_app():
     inject_base_styles()
     
     with st.sidebar:
+        # --- BRANDING DUAL IDENTITY ---
         st.markdown("""
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 2rem;">
-                <a href="https://deencommerce.com" target="_blank">
-                    <img src="https://raw.githubusercontent.com/saajiidi/Inventory-Distribution-Manager/main/assets/logo.png" width="45" style="border-radius: 8px;">
-                </a>
-                <div>
-                    <div style="font-size: 0.75rem; font-weight: 700; color: #2563eb; letter-spacing: 0.1em; text-transform: uppercase;">OPS COMMAND</div>
-                    <a href="https://deencommerce.com" target="_blank" style="text-decoration: none; color: inherit;">
-                        <div style="font-size: 1.1rem; font-weight: 600; line-height: 1.1;">DEEN Commerce</div>
-                    </a>
+            <div style="background: rgba(37, 99, 235, 0.05); padding: 1rem; border-radius: 12px; border: 1px solid rgba(37, 99, 235, 0.1); margin-bottom: 2rem;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 0.75rem;">
+                    <img src="https://cdn.brandfetch.io/deencommerce.com" width="30" style="border-radius: 4px;">
+                    <a href="https://deencommerce.com" target="_blank" style="text-decoration: none; color: inherit; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.05em;">DEEN COMMERCE</a>
                 </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <img src="https://raw.githubusercontent.com/saajiidi/Inventory-Distribution-Manager/main/assets/logo.png" width="30" style="border-radius: 4px;">
+                    <div style="font-size: 0.9rem; font-weight: 600; color: #f8fafc; opacity: 0.85;">Automation Pivot</div>
+                </div>
+                <div style="margin-top: 1rem; font-size: 0.65rem; font-weight: 800; color: #2563eb; letter-spacing: 0.2em; text-transform: uppercase;">⚡ OPS COMMAND</div>
             </div>
         """, unsafe_allow_html=True)
         
