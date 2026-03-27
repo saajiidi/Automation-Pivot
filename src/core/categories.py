@@ -1,9 +1,17 @@
+import re
+
 def _normalize(value) -> str:
     return str(value or "").strip().lower()
 
 
 def _has_any(text: str, keywords: list[str]) -> bool:
-    return any(kw in text for kw in keywords)
+    for kw in keywords:
+        # Use word boundaries to prevent substring overlaps (like 'bag' in 'cabbage')
+        # We handle multi-word keywords correctly here as well.
+        pattern = r"\b" + re.escape(kw.lower()) + r"\b"
+        if re.search(pattern, text.lower()):
+            return True
+    return False
 
 
 def _is_full_sleeve_orders(text: str) -> bool:

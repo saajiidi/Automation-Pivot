@@ -29,7 +29,7 @@ def _reset_inventory_state():
     )
 
 
-def render_distribution_tab(search_q, guided: bool = True):
+def render_distribution_tab(search_q=None, guided: bool = True):
     section_card(
         "Distribution Hub",
         "Analyze stock mapping, monitor low-stock risk, and export pick manifests.",
@@ -172,33 +172,31 @@ def render_distribution_tab(search_q, guided: bool = True):
                 st.session_state.inv_active_l,
                 st.session_state.inv_t_col,
             )
+            from src.ui.components import render_plotly_chart
             c1, c2 = st.columns(2)
             with c1:
                 melt = df.melt(
                     id_vars=[tc], value_vars=locs, var_name="Loc", value_name="Stock"
                 )
-                st.plotly_chart(
-                    px.density_heatmap(
-                        melt,
-                        x="Loc",
-                        y=tc,
-                        z="Stock",
-                        color_continuous_scale="RdYlGn",
-                        title="Stock Heatmap",
-                    ),
-                    use_container_width=True,
+                fig_hm = px.density_heatmap(
+                    melt,
+                    x="Loc",
+                    y=tc,
+                    z="Stock",
+                    color_continuous_scale="RdYlGn",
+                    title="Stock Heatmap",
                 )
+                render_plotly_chart(fig_hm, key="inv_heatmap")
+                
             with c2:
                 tots = df[locs].apply(pd.to_numeric, errors="coerce").fillna(0).sum()
-                st.plotly_chart(
-                    px.pie(
-                        values=tots.values,
-                        names=tots.index,
-                        title="Location Distribution",
-                        hole=0.4,
-                    ),
-                    use_container_width=True,
+                fig_pie = px.pie(
+                    values=tots.values,
+                    names=tots.index,
+                    title="Location Distribution",
+                    hole=0.4,
                 )
+                render_plotly_chart(fig_pie, key="inv_loc_pie")
         else:
             st.info("Run analysis to see insights.")
 

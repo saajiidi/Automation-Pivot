@@ -18,3 +18,5 @@ openai
 
 # Utilities
 pyshorteners
+dateparser
+pyarrow

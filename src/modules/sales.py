@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import os
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from src.core.categories import get_category_for_sales
 from src.core.paths import prepare_data_dirs, SYSTEM_LOG_FILE
 from src.ui.components import section_card
@@ -54,7 +54,7 @@ def get_custom_report_tab_label():
 # --- ANALYTICS ENGINE ---
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=20)
 def process_data(df, selected_cols):
     try:
         df = df.copy()
@@ -162,40 +162,38 @@ def process_data(df, selected_cols):
 
 
 def render_story_summary(summ, tp, timeframe, bk):
-    """Conversational data storytelling component."""
+    """Compact summary strip."""
     if summ is None or summ.empty:
         return
 
     total_rev = summ["Total Amount"].sum()
-    top_cat = summ.sort_values("Total Amount", ascending=False).iloc[0]["Category"]
-
-    # Adaptive Focus
-    is_cust = "Customer Name" in tp.columns
-    top_entity = tp.iloc[0][tp.columns[0]]
-    entity_label = "top shopper" if is_cust else "high-velocity item"
-
+    top_cat = summ.sort_values("Total Amount", ascending=False)
+    if top_cat.empty: return
+    top_cat_name = top_cat.iloc[0]["Category"]
     orders = bk.get("total_orders", 0)
 
-    story = f"""
-    <div style="background: rgba(59, 130, 246, 0.05); border-left: 4px solid var(--neon-blue); padding: 1.5rem; border-radius: 0 16px 16px 0; margin-bottom: 2rem; font-family: 'Outfit';">
-        <div style="color: var(--neon-blue); font-weight: 700; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.1em; margin-bottom: 0.5rem;">📊 EXECUTIVE NARRATIVE</div>
-        <div style="font-size: 1.1rem; color: var(--text-primary); line-height: 1.5;">
-            In the period <b>{timeframe or 'Overview'}</b>, the operations processed <b>{orders:,} orders</b> driving a total revenue of <b>TK {total_rev:,.0f}</b>. 
-            The performance was primarily led by the <b>{top_cat}</b> category, with <b>{top_entity}</b> emerging as the {entity_label}. 
-            Customer engagement shows an average basket value of <b>TK {bk.get('avg_basket_value', 0):,.0f}</b> per transaction.
+    st.markdown(f"""
+    <div style="background: var(--surface-bg); border: 1px solid var(--surface-border); border-left: 4px solid var(--accent-primary); padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+        <div style="font-size: 0.95rem; color: var(--text-primary); line-height: 1.4;">
+            <b>{timeframe or 'Overview'} Analysis:</b> Total revenue of <b>TK {total_rev:,.0f}</b> from <b>{orders:,} orders</b>. 
+            Top performance in <b>{top_cat_name}</b>. Average basket: <b>TK {bk.get('avg_basket_value', 0):,.0f}</b>.
         </div>
     </div>
-    """
-    st.markdown(story, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 
 # --- UI RENDERING ---
 
 
 def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=None):
+    is_dark = st.session_state.get("app_theme", "Dark Mode") == "Dark Mode"
+    color_scale = "Blues_r" if is_dark else "Plasma"
+    
     render_story_summary(sm, top_prod, tf, bk)
     st.markdown(f"### ⚡ Statement: {tf or 'All Records'}")
-    from src.ui.components import render_metric_hud
+    from src.ui.components import render_metric_hud, render_status_strip
+
+    render_status_strip(source=src or "Local", rows=len(df), last_refresh=upd or "N/A", status="Active Dataset ✅")
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -237,10 +235,6 @@ def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=Non
 
     st.divider()
 
-    is_dark = st.session_state.get("app_theme", "Dark Mode") == "Dark Mode"
-    color_scale = "Blues_r" if is_dark else "Plasma"
-    chart_font_color = "#f8fafc" if is_dark else "#0f172a"
-
     col1, col2 = st.columns(2)
     with col1:
         # Sort for color consistency
@@ -253,14 +247,8 @@ def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=Non
             title="Revenue Share",
             color_discrete_sequence=getattr(px.colors.sequential, color_scale),
         )
-        fig_pie.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font_color=chart_font_color,
-        )
-        st.plotly_chart(
-            fig_pie, use_container_width=True, key=f"sales_pie_{src or 'default'}"
-        )
+        from src.ui.components import render_plotly_chart
+        render_plotly_chart(fig_pie, key=f"sales_pie_{src or 'default'}")
 
     with col2:
         fig_bar = px.bar(
@@ -272,14 +260,8 @@ def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=Non
             color="Total Amount",
             color_continuous_scale="Blues" if is_dark else "Viridis",
         )
-        fig_bar.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font_color=chart_font_color,
-        )
-        st.plotly_chart(
-            fig_bar, use_container_width=True, key=f"sales_bar_{src or 'default'}"
-        )
+        from src.ui.components import render_plotly_chart
+        render_plotly_chart(fig_bar, key=f"sales_bar_{src or 'default'}")
 
     # Analytics Tabs (Replaces "Detailed Product Breakdown" expander)
     analysis_tabs = st.tabs(
@@ -353,34 +335,108 @@ def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=Non
 
 
 def render_live_tab():
+    from src.ui.components import render_status_strip, render_action_bar
     section_card(
         "📡 Live Stream", "Real-time performance synchronized with LastDaySales."
     )
-    if st.button("🔄 Sync Now", use_container_width=True, key="live_sync_btn"):
+    
+    p_click, _ = render_action_bar("🔄 Force Manual Sync", "live_sync_btn")
+    if p_click:
+        from src.core.sync import clear_sync_cache
         clear_sync_cache()
-        process_data.clear()
         st.toast("⚡ Syncing Live Records...", icon="🔄")
         st.rerun()
     try:
-        df, src, upd = load_shared_gsheet("LastDaySales")
+        from src.core.sync import load_shared_gsheet
+        df, src, upd = load_shared_gsheet("LastDaySales", force_refresh=False)
+        
+        # Precomputed KPI Snapshot Check
+        from src.core.paths import CACHE_DIR
+        kpi_cache_file = CACHE_DIR / "live_kpi_snapshot.json"
+        
         mc = find_columns(df)
         dr, sm, tp, tf, bk, df, tc = process_data(df, mc)
+
+        # Save KPI snapshot for even faster cold starts
+        if sm is not None:
+             try:
+                 snapshot = {
+                     "upd": upd,
+                     "items": int(sm['Total Qty'].sum()),
+                     "revenue": float(sm['Total Amount'].sum()),
+                     "orders": int(bk['total_orders']),
+                     "avg_basket": float(bk['avg_basket_value'])
+                 }
+                 with open(kpi_cache_file, "w") as f:
+                     json.dump(snapshot, f)
+             except Exception:
+                 pass
+
         if df is not None:
             render_dashboard_output(df, dr, sm, tp, tf, bk, src, upd, top_cust=tc)
     except Exception as e:
+        # Try to show last known KPI if sync fails
+        from src.core.paths import CACHE_DIR
+        kpi_cache_file = CACHE_DIR / "live_kpi_snapshot.json"
+        if os.path.exists(kpi_cache_file):
+            with open(kpi_cache_file, "r") as f:
+                s = json.load(f)
+            st.warning(f"Live sync offline. Showing snapshot from {s.get('upd', 'Unknown')}")
+            c1, c2, c3, c4 = st.columns(4)
+            from src.ui.components import render_metric_hud
+            render_metric_hud("Items (Cached)", f"{s.get('items', 0):,}", "📦")
+            render_metric_hud("Orders (Cached)", f"{s.get('orders', 0):,}", "🛒")
+            render_metric_hud("Revenue (Cached)", f"TK {s.get('revenue', 0):,.0f}", "💰")
+            render_metric_hud("Avg Basket (Cached)", f"TK {s.get('avg_basket', 0):,.0f}", "🛍️")
+        
         st.error(f"Live sync error: {e}")
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_all_statements_master(full_history: bool = False):
-    """Fetches statement tabs. If full_history is False, only fetches recent statements."""
+def parse_date_from_tab_name(name):
+    """Helper to extract date from tab names for sorting."""
+    import dateparser
+
+    try:
+        # Try cleaning the name for better parsing (remove 'Statement', 'Sync', etc)
+        clean_name = (
+            name.lower().replace("statement", "").replace("sync", "").replace("_", " ")
+        )
+        dt = dateparser.parse(clean_name)
+        return dt or datetime(2000, 1, 1)
+    except Exception:
+        return datetime(2000, 1, 1)
+
+
+def get_all_statements_master(full_history: bool = False, force_refresh: bool = False):
+    """
+    Intelligent Incremental Builder for Statement Master.
+    Treats historical data (2022-2025) as immutable local blocks.
+    Only syncs 2026/Live tabs frequently.
+    """
+    from src.core.paths import GSHEETS_CACHE_DIR
+    from src.core.sync import load_sheet_with_cache, is_volatile, load_published_sheet_tabs
+    
+    cache_file = GSHEETS_CACHE_DIR / (
+        "master_full.parquet" if full_history else "master_recent.parquet"
+    )
+
+    # 1. Initialize empty or existing master foundation
+    master_df = pd.DataFrame()
+    if cache_file.exists():
+        try:
+            master_df = pd.read_parquet(cache_file)
+        except Exception:
+            master_df = pd.DataFrame()
+
     url = get_setting("GSHEET_URL", DEFAULT_GSHEET_URL)
     try:
-        tabs = load_published_sheet_tabs(url)
-    except Exception:
-        return None, "Failed to load tabs"
+        tabs = load_published_sheet_tabs(url, force_refresh=force_refresh)
+    except Exception as e:
+        if not master_df.empty:
+            return master_df, f"Offline Mode: Using Local Database ({len(master_df):,} rows)"
+        return None, f"Failed to load tabs: {e}"
 
-    # Priority sorting: Current year/statements first
+    # 2. Filter and sort tabs (same logic as before)
     relevant_tabs = []
     for tab in tabs:
         tname = tab["name"].lower()
@@ -390,65 +446,99 @@ def get_all_statements_master(full_history: bool = False):
             or "template" in tname
         ):
             continue
+        tab["parsed_date"] = parse_date_from_tab_name(tab["name"])
         relevant_tabs.append(tab)
 
-    # If not full history, only take top 3 latest tabs for speed
+    relevant_tabs.sort(key=lambda x: x["parsed_date"], reverse=True)
     if not full_history and len(relevant_tabs) > 3:
-        # We assume recent are at the beginning or end?
-        # Usually they are at the beginning of the list returned by published GSheets.
         relevant_tabs = relevant_tabs[:3]
 
+    # 3. Incremental Processing Loop
     all_dfs = []
-    for tab in relevant_tabs:
-        try:
-            from src.core.sync import normalize_gsheet_url_to_csv
-            from src.utils.io import read_remote_csv
+    failures = []
+    skipped_count = 0
+    synced_count = 0
+    
+    progress_text = f"Updating {'Full' if full_history else 'Recent'} Database..."
+    progress_bar = st.progress(0, text=progress_text)
 
-            csv_url = normalize_gsheet_url_to_csv(url, tab["gid"])
-            df, _ = read_remote_csv(csv_url)
+    for i, tab in enumerate(relevant_tabs):
+        tab_name = tab["name"]
+        tab_gid = tab["gid"]
+        
+        # DECISION: Should we sync this tab?
+        # A) It's volatile (current year/live)
+        # B) It's missing from local master
+        # C) User forced a refresh
+        is_missing = master_df.empty or "_src_tab" not in master_df.columns or tab_name not in master_df["_src_tab"].unique()
+        needs_sync = force_refresh or is_volatile(tab_name) or is_missing
+
+        if not needs_sync:
+            # Re-use existing local data for this tab
+            local_tab_data = master_df[master_df["_src_tab"] == tab_name]
+            if not local_tab_data.empty:
+                all_dfs.append(local_tab_data)
+                skipped_count += 1
+                continue
+
+        # Perform Network Sync
+        try:
+            progress_bar.progress((i + 1) / len(relevant_tabs), text=f"Syncing {tab_name}...")
+            df, _ = load_sheet_with_cache(url, tab_gid, tab_name, force_refresh=force_refresh)
+            
             if not df.empty:
                 m = find_columns(df)
                 df = df.copy()
-                df["_src_tab"] = tab["name"]
+                df["_src_tab"] = tab_name
 
-                # 🛡️ Initialize full internal schema with safe defaults
-                df["_p_name"] = "Unknown Product"
-                df["_p_cust_name"] = None
-                df["_p_cost"] = 0
-                df["_p_qty"] = 0
-                df["_p_date"] = pd.NaT
-                df["_p_order"] = None
-                df["_p_phone"] = None
-                df["_p_email"] = None
+                # Schema mapping (same robust logic as before)
+                schema_cols = {
+                    "_p_name": ("name", "Unknown Product"),
+                    "_p_cust_name": ("customer_name", None),
+                    "_p_cost": ("cost", 0),
+                    "_p_qty": ("qty", 0),
+                    "_p_date": ("date", pd.NaT),
+                    "_p_order": ("order_id", None),
+                    "_p_phone": ("phone", None),
+                    "_p_email": ("email", None),
+                }
 
-                if "name" in m:
-                    df["_p_name"] = df[m["name"]].astype(str)
-                if "customer_name" in m:
-                    df["_p_cust_name"] = df[m["customer_name"]].astype(str)
-                if "cost" in m:
-                    df["_p_cost"] = pd.to_numeric(
-                        df[m["cost"]], errors="coerce"
-                    ).fillna(0)
-                if "qty" in m:
-                    df["_p_qty"] = pd.to_numeric(df[m["qty"]], errors="coerce").fillna(
-                        0
-                    )
-                if "date" in m:
-                    df["_p_date"] = parse_dates(df[m["date"]])
-                if "order_id" in m:
-                    df["_p_order"] = df[m["order_id"]].astype(str)
-                if "phone" in m:
-                    df["_p_phone"] = df[m["phone"]].astype(str)
-                if "email" in m:
-                    df["_p_email"] = df[m["email"]].astype(str)
+                for internal, (find_key, default) in schema_cols.items():
+                    if find_key in m:
+                        if internal == "_p_cost" or internal == "_p_qty":
+                             df[internal] = pd.to_numeric(df[m[find_key]], errors="coerce").fillna(0)
+                        elif internal == "_p_date":
+                             df[internal] = parse_dates(df[m[find_key]])
+                        else:
+                             df[internal] = df[m[find_key]].astype(str)
+                    else:
+                        df[internal] = default
+                
                 all_dfs.append(df)
-        except Exception:
-            pass
+                synced_count += 1
+        except Exception as e:
+            failures.append(f"{tab_name} ({e})")
+            # Fallback to local data if sync failed
+            local_tab_data = master_df[master_df["_src_tab"] == tab_name] if not master_df.empty else pd.DataFrame()
+            if not local_tab_data.empty:
+                all_dfs.append(local_tab_data)
+
+    progress_bar.empty()
 
     if not all_dfs:
-        return None, "No valid data found"
-    master = pd.concat(all_dfs, ignore_index=True)
-    return master, f"Loaded {'Full' if full_history else 'Recent'} Database"
+        return None, "Database is empty."
+
+    # 4. Final Reconstruction
+    final_master = pd.concat(all_dfs, ignore_index=True)
+    
+    # Save optimized master
+    try:
+        final_master.to_parquet(cache_file, index=False)
+    except Exception:
+        pass
+
+    msg = f"Database Ready: {len(final_master):,} rows ({synced_count} updated, {skipped_count} local)"
+    return final_master, msg
 
 
 def render_custom_period_tab():
@@ -463,10 +553,18 @@ def render_custom_period_tab():
         key="full_hist_toggle",
     )
 
+    # Refresh action
+    if st.button("🔄 Rebuild Selected Dataset", use_container_width=True, key="rebuild_master_btn"):
+        get_all_statements_master(full_history=full_requested, force_refresh=True)
+        st.toast("⚡ Rebuilding Master Parquet Database...", icon="🔄")
+        st.rerun()
+
     master, msg = get_all_statements_master(full_history=full_requested)
     if master is None:
         st.error(msg)
         return
+    
+    st.caption(f"📊 Status: {msg}")
 
     if "_p_date" in master.columns:
         valid_dates = master[master["_p_date"].notna()]
@@ -481,31 +579,67 @@ def render_custom_period_tab():
 
         # ALLOW SELECTION FROM 2022
         abs_min = date(2022, 1, 1)
-        f1, f2 = st.columns(2)
-        default_start = max(min_d, date.today() - timedelta(days=90))
-        start = f1.date_input(
-            "Filter From",
-            default_start,
-            min_value=abs_min,
-            max_value=date.today(),
-            key="cust_start",
-        )
-        end = f2.date_input(
-            "Filter To",
-            date.today(),
-            min_value=abs_min,
-            max_value=date.today(),
-            key="cust_end",
-        )
+
+        # Filter Presets
+        st.caption("⚡ Quick Date Presets")
+        fp1, fp2, fp3, fp4 = st.columns(4)
+        if fp1.button("📅 This Month", use_container_width=True):
+            st.session_state.cust_start = date.today().replace(day=1)
+            st.session_state.cust_end = date.today()
+            st.rerun()
+        if fp2.button("📅 Last 90 Days", use_container_width=True):
+            st.session_state.cust_start = date.today() - timedelta(days=90)
+            st.session_state.cust_end = date.today()
+            st.rerun()
+        if fp3.button("📅 Year to Date", use_container_width=True):
+            st.session_state.cust_start = date(date.today().year, 1, 1)
+            st.session_state.cust_end = date.today()
+            st.rerun()
+        if fp4.button("📅 Full History", use_container_width=True):
+             st.session_state.full_hist_toggle = True
+             st.session_state.cust_start = abs_min
+             st.session_state.cust_end = date.today()
+             st.rerun()
+
+        with st.form("date_filter_form"):
+            f1, f2 = st.columns(2)
+            default_start = max(min_d, date.today() - timedelta(days=90))
+            start = f1.date_input(
+                "Filter From",
+                default_start,
+                min_value=abs_min,
+                max_value=date.today(),
+                key="cust_start",
+            )
+            end = f2.date_input(
+                "Filter To",
+                date.today(),
+                min_value=abs_min,
+                max_value=date.today(),
+                key="cust_end",
+            )
+            submit = st.form_submit_button("⚡ Apply Period Filter", use_container_width=True)
+            
+        if not submit and "applied_start" not in st.session_state:
+            st.info("📅 Adjust dates and click 'Apply Period Filter' to load data.")
+            return
+
+        # Persist applied dates
+        if submit:
+            st.session_state.applied_start = start
+            st.session_state.applied_end = end
+            
+        cur_start = st.session_state.get("applied_start", start)
+        cur_end = st.session_state.get("applied_end", end)
 
         # If user picked a date earlier than current master min, hint at full history
-        if start < min_d and not full_requested:
+        if cur_start < min_d and not full_requested:
             st.info(
                 "💡 Selecting dates further back? Toggle 'Enable Full Deep-History' above."
             )
 
         filtered = master[
-            (master["_p_date"].dt.date >= start) & (master["_p_date"].dt.date <= end)
+            (master["_p_date"].dt.date >= cur_start) & (master["_p_date"].dt.date <= cur_end)
         ].copy()
 
         if filtered.empty:
@@ -546,7 +680,8 @@ def render_customer_pulse_tab():
     if st.button(
         "🔄 Refresh Pulse Data", use_container_width=True, key="refresh_pulse_btn"
     ):
-        get_all_statements_master.clear()
+        get_all_statements_master(full_history=st.session_state.get("pulse_hist_toggle", False), force_refresh=True)
+        st.toast("⚡ Updating Pulse Analytics...", icon="🔄")
         st.rerun()
 
     # Check if we need full history for Pulse too
@@ -700,18 +835,13 @@ def render_customer_pulse_core(master, full_hist):
             x="Month",
             y=["Cumulative", "New"],
             title="Customer Scaling Factor",
-            template=theme_template,
             color_discrete_sequence=(
                 ["#3b82f6", "#10b981"] if is_dark else ["#1d4ed8", "#059669"]
             ),
-        ).update_layout(
-            hovermode="x unified",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font_color=chart_font_color,
         )
         fig_growth.update_traces(mode="lines+markers")
-        st.plotly_chart(fig_growth, use_container_width=True, key="pulse_scaling_line")
+        from src.ui.components import render_plotly_chart
+        render_plotly_chart(fig_growth, key="pulse_scaling_line")
 
     with col2:
         retention_df = pd.DataFrame(
@@ -726,16 +856,38 @@ def render_customer_pulse_core(master, full_hist):
             names="Segment",
             title="Retention Dynamics",
             hole=0.6,
-            template=theme_template,
             color_discrete_sequence=(
                 ["#10b981", "#334155"] if is_dark else ["#059669", "#cbd5e1"]
             ),
-        ).update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font_color=chart_font_color,
         )
-        st.plotly_chart(fig_ret, use_container_width=True, key="pulse_ret_pie")
+        from src.ui.components import render_plotly_chart
+        render_plotly_chart(fig_ret, key="pulse_ret_pie")
+
+    # COHORT ANALYSIS
+    with st.expander("📈 Monthly Acquisition Cohorts"):
+        st.markdown("<div style='margin-bottom:1.5rem;'>", unsafe_allow_html=True)
+        st.markdown("#### Retention Heatmap")
+        try:
+            # We need to know first purchase month for each UID
+            cohort_data = db.copy()
+            cohort_data['Month'] = cohort_data['_p_date'].dt.to_period('M')
+            first_purchase = cohort_data.groupby('UID')['_p_date'].min().dt.to_period('M').reset_index()
+            first_purchase.columns = ['UID', 'FirstMonth']
+            
+            cohort_merged = pd.merge(cohort_data, first_purchase, on='UID')
+            cohort_pivot = cohort_merged.groupby(['FirstMonth', 'Month']).agg({'UID': 'nunique'}).reset_index()
+            cohort_pivot['Period'] = (cohort_pivot['Month'] - cohort_pivot['FirstMonth']).apply(lambda x: x.n)
+            
+            final_cohort = cohort_pivot.pivot(index='FirstMonth', columns='Period', values='UID')
+            # Convert to retention percentage
+            cohort_size = final_cohort.iloc[:, 0]
+            retention = final_cohort.divide(cohort_size, axis=0) * 100
+            
+            st.markdown("#### Retention % by Acquisition Month")
+            st.dataframe(retention.style.format("{:.1f}%").background_gradient(cmap='Greens', axis=None), use_container_width=True)
+            st.caption("Month 0 = Acquisition Month. Month 1+ = Returned in subsequent months.")
+        except Exception as e:
+            st.info(f"Cohort data requires more history to render correctly. ({e})")
 
     # VIP LEADERBOARD
     st.markdown("### 🏆 Platinum Tier: Top 10 Spenders")
@@ -750,6 +902,7 @@ def render_customer_pulse_core(master, full_hist):
     )
 
     with st.expander("🔍 Deep Dive: Demographic & Risk Analysis"):
+        st.markdown("<div style='margin-bottom:1.5rem;'>", unsafe_allow_html=True)
         st.caption("Risk Analysis: Customers not active in 90+ days")
         three_months_ago = datetime.now() - timedelta(days=90)
         risk_count = len(freq[freq["LastActive"] < three_months_ago])
@@ -759,13 +912,100 @@ def render_customer_pulse_core(master, full_hist):
 
         if "_src_tab" in db.columns:
             source_grp = db.groupby("_src_tab").size().reset_index(name="Volume")
-            st.plotly_chart(
-                px.bar(
-                    source_grp,
-                    x="Volume",
-                    y="_src_tab",
-                    orientation="h",
-                    title="Loyalty by Source Channel",
-                ),
-                use_container_width=True,
+            fig_src = px.bar(
+                source_grp,
+                x="Volume",
+                y="_src_tab",
+                orientation="h",
+                title="Loyalty by Source Channel",
             )
+            from src.ui.components import render_plotly_chart
+            render_plotly_chart(fig_src, key="pulse_source_bar")
+
+
+def render_cache_health_panel():
+    """System tool to inspect the GSheet cache status."""
+    from src.core.sync import load_manifest
+    from src.core.paths import GSHEETS_CACHE_DIR, GSHEETS_RAW_DIR, GSHEETS_NORM_DIR
+    import os
+
+    st.markdown("### 🧪 GSheet Cache Health")
+    manifest = load_manifest()
+
+    if not manifest:
+        st.info("Cache is empty. Start a sync to populate.")
+        return
+
+    # Summary Metrics
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Manifest Entries", len(manifest))
+    
+    raw_size = sum(f.stat().st_size for f in GSHEETS_RAW_DIR.glob('*.csv')) / (1024 * 1024)
+    norm_size = sum(f.stat().st_size for f in GSHEETS_NORM_DIR.glob('*.parquet')) / (1024 * 1024)
+    
+    c2.metric("Raw Storage", f"{raw_size:.2f} MB")
+    c3.metric("Norm Storage", f"{norm_size:.2f} MB")
+
+    st.markdown("#### 📑 Cached Tabs")
+    cache_data = []
+    for k, v in manifest.items():
+        if k.startswith("tabs_"):
+            continue
+        
+        age = "N/A"
+        if "fetched_at" in v:
+            dt = datetime.fromisoformat(v["fetched_at"])
+            diff = datetime.now(timezone.utc) - dt
+            age = f"{int(diff.total_seconds() // 60)}m ago"
+        
+        cache_data.append({
+            "Tab": v.get("tab_name", "Unknown"),
+            "GID": v.get("gid"),
+            "Last Modified": v.get("last_modified", "Unknown"),
+            "Rows": v.get("row_count", 0),
+            "Age": age,
+            "Status": "✅ Fresh" if "m ago" in age and int(age.split('m')[0]) < 60 else "🟠 Stale"
+        })
+    
+    if cache_data:
+        st.table(pd.DataFrame(cache_data))
+    
+    if st.button("🗑️ Wipe All Local Cache", type="secondary"):
+        from src.core.sync import clear_sync_cache
+        clear_sync_cache()
+        st.toast("Cache Purged")
+        st.rerun()
+
+
+def render_data_completeness_report():
+    """Detailed report on which months/tabs are loaded vs missing."""
+    st.markdown("### 📊 Data Completeness Report")
+    url = get_setting("GSHEET_URL", DEFAULT_GSHEET_URL)
+    try:
+        from src.core.sync import load_published_sheet_tabs, load_manifest
+        tabs = load_published_sheet_tabs(url)
+        manifest = load_manifest()
+        
+        report = []
+        for t in tabs:
+            if t["name"].lower() in TOTAL_SALES_EXCLUDED_TABS:
+                continue
+            
+            cache_key = f"gid_{t['gid']}"
+            cached = manifest.get(cache_key)
+            status = "❌ Missing"
+            details = "Not yet synced"
+            
+            if cached:
+                status = "✅ Synced"
+                details = f"{cached.get('row_count', 0)} rows, {cached.get('last_modified', 'No date')}"
+            
+            report.append({
+                "Sheet Tab": t["name"],
+                "Status": status,
+                "Details": details
+            })
+        
+        st.dataframe(pd.DataFrame(report), use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.error(f"Failed to generate report: {e}")

@@ -1,9 +1,14 @@
 import streamlit as st
 import re
+import os
+import json
+import pandas as pd
+from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 from urllib.parse import parse_qs, urlparse
 from html import unescape
-from src.utils.io import read_remote_csv
+from src.utils.io import fetch_remote_csv_raw
+from src.core.paths import GSHEETS_RAW_DIR, GSHEETS_NORM_DIR, GSHEETS_MANIFEST
 
 DEFAULT_GSHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTBDukmkRJGgHjCRIAAwGmlWaiPwESXSp9UBXm3_sbs37bk2HxavPc62aobmL1cGWUfAKE4Zd6yJySO/pubhtml"
 PUBLISHED_SHEET_TAB_RE = re.compile(
@@ -42,34 +47,179 @@ def normalize_gsheet_url_to_csv(sheet_url, gid=None):
     return url
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_published_sheet_tabs(sheet_url):
-    req = Request(sheet_url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(req) as resp:
-        html = resp.read().decode("utf-8", errors="replace")
-    tabs = []
-    for name, _, gid in PUBLISHED_SHEET_TAB_RE.findall(html):
-        tabs.append({"name": unescape(name).strip(), "gid": str(gid).strip()})
-    return tabs
+# --- MANIFEST HANDLERS ---
 
 
-@st.cache_data(ttl=45, show_spinner=False)
-def load_shared_gsheet(target_tab_name="LastDaySales"):
+def load_manifest():
+    if os.path.exists(GSHEETS_MANIFEST):
+        try:
+            with open(GSHEETS_MANIFEST, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def save_manifest(manifest):
+    with open(GSHEETS_MANIFEST, "w") as f:
+        json.dump(manifest, f, indent=2)
+
+
+def get_cache_key(gid, sheet_id=None):
+    return f"gid_{gid}"
+
+
+# --- SMART LOADERS ---
+
+
+def load_published_sheet_tabs(sheet_url, force_refresh=False):
+    """Fetch tab names and gids from published HTML with 1-hour cache."""
+    manifest = load_manifest()
+    host = urlparse(sheet_url).netloc
+    cache_key = f"tabs_{host}"
+
+    if not force_refresh and cache_key in manifest:
+        cached = manifest[cache_key]
+        cached_at = datetime.fromisoformat(cached["fetched_at"])
+        if (datetime.now(timezone.utc) - cached_at).total_seconds() < 3600:
+            return cached["tabs"]
+
+    try:
+        req = Request(sheet_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(req) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+        tabs = []
+        for name, _, gid in PUBLISHED_SHEET_TAB_RE.findall(html):
+            tabs.append({"name": unescape(name).strip(), "gid": str(gid).strip()})
+
+        if tabs:
+            manifest[cache_key] = {
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "tabs": tabs,
+            }
+            save_manifest(manifest)
+        return tabs
+    except Exception as e:
+        if cache_key in manifest:
+            return manifest[cache_key]["tabs"]
+        raise e
+
+
+def is_volatile(tab_name: str) -> bool:
+    """Identify if a sheet is likely to change frequently."""
+    name = str(tab_name).lower().strip()
+    # Current year and special 'Live' sheets are volatile
+    if "2026" in name or "last" in name or "live" in name:
+        return True
+    return False
+
+
+def load_sheet_with_cache(sheet_url, gid, tab_name, force_refresh=False):
+    """
+    Load a specific tab with persistent disk cache and conditional revalidation.
+    """
+    manifest = load_manifest()
+    cache_key = get_cache_key(gid)
+    raw_path = GSHEETS_RAW_DIR / f"{cache_key}.csv"
+    norm_path = GSHEETS_NORM_DIR / f"{cache_key}.parquet"
+
+    # Intelligent TTL based on volatility
+    volatile = is_volatile(tab_name)
+    ttl_seconds = 300 if volatile else 2592000  # 5 min vs 30 days
+
+    # Check if we can use local cache immediately
+    if cache_key in manifest and not force_refresh:
+        cached = manifest[cache_key]
+        fetched_at = datetime.fromisoformat(cached["fetched_at"])
+        if (datetime.now(timezone.utc) - fetched_at).total_seconds() < ttl_seconds:
+            if norm_path.exists():
+                try:
+                    return pd.read_parquet(norm_path), cached.get("last_modified", "Cached")
+                except Exception:
+                    pass
+
+    # Try background refresh or direct fetch
+    csv_url = normalize_gsheet_url_to_csv(sheet_url, gid)
+    try:
+        raw_bytes, headers = fetch_remote_csv_raw(csv_url)
+        etag = headers.get("ETag")
+        last_mod = headers.get("Last-Modified")
+
+        # Skip parsing if ETag matches
+        if (
+            not force_refresh
+            and cache_key in manifest
+            and etag
+            and manifest[cache_key].get("etag") == etag
+            and norm_path.exists()
+        ):
+            df = pd.read_parquet(norm_path)
+            return df, last_mod or "304 Not Modified"
+
+        # Save raw and parse
+        with open(raw_path, "wb") as f:
+            f.write(raw_bytes)
+
+        from io import BytesIO
+
+        df = pd.read_csv(BytesIO(raw_bytes))
+
+        # Save normalized parquet for speed
+        df.to_parquet(norm_path, index=False)
+
+        # Update manifest
+        manifest[cache_key] = {
+            "gid": gid,
+            "tab_name": tab_name,
+            "etag": etag,
+            "last_modified": last_mod,
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "row_count": len(df),
+        }
+        save_manifest(manifest)
+
+        return df, last_mod or "New Sync"
+
+    except Exception as e:
+        # Fallback to cache if available
+        if cache_key in manifest and norm_path.exists():
+            return pd.read_parquet(norm_path), manifest[cache_key].get(
+                "last_modified", "Offline/Stale"
+            )
+        raise e
+
+
+def load_shared_gsheet(target_tab_name="LastDaySales", force_refresh=False):
     """Modular loader for sharing Google Sheet data across all app modules."""
     sheet_url = _get_setting("GSHEET_URL", DEFAULT_GSHEET_URL)
-    tabs = load_published_sheet_tabs(sheet_url)
+    tabs = load_published_sheet_tabs(sheet_url, force_refresh=force_refresh)
     target = next(
         (t for t in tabs if t["name"].lower() == target_tab_name.lower()),
-        tabs[0] if tabs else None,
+        None,
     )
+
     if not target:
-        raise ValueError(f"Target tab '{target_tab_name}' not found.")
-    csv_url = normalize_gsheet_url_to_csv(sheet_url, gid=target["gid"])
-    df, lm = read_remote_csv(csv_url)
+        # If target not found by name, try fallback or error
+        if target_tab_name == "LastDaySales" and tabs:
+            target = tabs[0]
+        else:
+            raise ValueError(f"Target tab '{target_tab_name}' not found.")
+
+    df, lm = load_sheet_with_cache(
+        sheet_url, target["gid"], target["name"], force_refresh=force_refresh
+    )
     return df, target["name"], lm
 
 
 def clear_sync_cache():
-    """Wipes the cache for all shared data loading functions."""
-    load_shared_gsheet.clear()
-    load_published_sheet_tabs.clear()
+    """Wipes the disk cache entirely."""
+    import shutil
+
+    if GSHEETS_RAW_DIR.exists():
+        shutil.rmtree(GSHEETS_RAW_DIR)
+    if GSHEETS_NORM_DIR.exists():
+        shutil.rmtree(GSHEETS_NORM_DIR)
+    if GSHEETS_MANIFEST.exists():
+        os.remove(GSHEETS_MANIFEST)
+    GSHEETS_RAW_DIR.mkdir(parents=True, exist_ok=True)
+    GSHEETS_NORM_DIR.mkdir(parents=True, exist_ok=True)
