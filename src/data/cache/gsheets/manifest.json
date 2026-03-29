@@ -1,6 +1,6 @@
 {
   "tabs_docs.google.com": {
-    "fetched_at": "2026-03-29T09:45:34.457671+00:00",
+    "fetched_at": "2026-03-29T10:44:06.921284+00:00",
     "tabs": [
       {
         "name": "LatestSales",
@@ -33,15 +33,7 @@
     "tab_name": "LatestSales",
     "etag": null,
     "last_modified": null,
-    "fetched_at": "2026-03-29T09:45:38.458155+00:00",
+    "fetched_at": "2026-03-29T10:44:08.109363+00:00",
     "row_count": 47
-  },
-  "gid_436235820": {
-    "gid": "436235820",
-    "tab_name": "2026",
-    "etag": null,
-    "last_modified": null,
-    "fetched_at": "2026-03-29T10:40:23.900642+00:00",
-    "row_count": 6075
   }
 }
