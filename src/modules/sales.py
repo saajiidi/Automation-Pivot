@@ -234,7 +234,35 @@ def render_dashboard_output(
     top_cust=None,
     show_full_raw=False,
     display_period=None,
+    prev_metrics=None,
 ):
+    """
+    Core dashboard renderer for Sales Analysis and historical reports.
+    Now supports Period-over-Period (PoP) comparison via prev_metrics.
+    """
+    # Calculate deltas for comparative analytics
+    deltas = {}
+    if prev_metrics:
+        p_sm = prev_metrics.get("sm")
+        p_bk = prev_metrics.get("bk")
+        
+        # Revenue Delta
+        curr_rev = sm["Total Amount"].sum() if not sm.empty else 0
+        prev_rev = p_sm["Total Amount"].sum() if (p_sm is not None and not p_sm.empty) else 0
+        if prev_rev > 0:
+            deltas["rev"] = (curr_rev - prev_rev) / prev_rev * 100
+            
+        # Quantity Delta
+        curr_qty = sm["Total Qty"].sum() if not sm.empty else 0
+        prev_qty = p_sm["Total Qty"].sum() if (p_sm is not None and not p_sm.empty) else 0
+        if prev_qty > 0:
+            deltas["qty"] = (curr_qty - prev_qty) / prev_qty * 100
+            
+        # Orders Delta
+        curr_ords = bk.get("total_orders", 0)
+        prev_ords = p_bk.get("total_orders", 0) if p_bk else 0
+        if prev_ords > 0:
+            deltas["orders"] = (curr_ords - prev_ords) / prev_ords * 100
     pie_colors = ["#2563eb", "#0f766e", "#ea580c", "#7c3aed", "#0891b2", "#be185d"]
     from io import BytesIO
     from src.ui.components import render_plotly_chart, render_status_strip
@@ -244,10 +272,10 @@ def render_dashboard_output(
 
     render_ops_hero(
         "Sales Analysis",
-        "Historical sales performance from the workbook core plus the latest 2026 delta.",
+        "Historical sales performance with PoP comparative analytics active.",
         [
             f"Period {display_period or tf or 'All Records'}",
-            f"Source {src or 'Local'}",
+            f"PoP Analytics {'Enabled' if prev_metrics else 'Off'}",
             f"Refresh {upd or 'N/A'}",
         ],
     )
@@ -734,7 +762,7 @@ def render_live_tab():
 
         render_ops_hero(
             f"{LIVE_SALES_TAB_NAME} Live Queue",
-            "Core metrics focus on what is still waiting to be sold, packed, shipped, and archived.",
+            "Core metrics focus on active processing. Analytics engine: ACTIVE.",
             [
                 f"Source {package.source_name}",
                 f"Refresh {package.last_refresh or 'N/A'}",
@@ -746,6 +774,13 @@ def render_live_tab():
             rows=len(package.normalized_df),
             last_refresh=package.last_refresh,
             status="Active Queue",
+        )
+        
+        # NEW: Automated Insights for Live Queue
+        render_automated_insights(
+            package.normalized_df, 
+            analytics["summary"], 
+            analytics["basket"]
         )
 
         summary = analytics["summary"].copy()
@@ -775,9 +810,9 @@ def render_live_tab():
             )
         with top_row[3]:
             render_ops_kpi(
-                "Basket Analysis",
-                f"{analytics['basket']['avg_basket_qty']:.1f} qty",
-                f"Avg basket TK {analytics['basket']['avg_basket_value']:,.0f}",
+                "Avg Basket Value",
+                f"TK {analytics['basket']['avg_basket_value']:,.0f}",
+                f"Avg {analytics['basket']['avg_basket_qty']:.1f} items per basket",
             )
 
         chart_a, chart_b = st.columns(2)
