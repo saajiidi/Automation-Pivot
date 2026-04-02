@@ -10,7 +10,7 @@ from html import unescape
 from src.utils.io import fetch_remote_csv_raw
 from src.core.paths import GSHEETS_RAW_DIR, GSHEETS_NORM_DIR, GSHEETS_MANIFEST
 
-DEFAULT_GSHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTBDukmkRJGgHjCRIAAwGmlWaiPwESXSp9UBXm3_sbs37bk2HxavPc62aobmL1cGWUfAKE4Zd6yJySO/pubhtml"
+DEFAULT_GSHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOiRkybNzMNvEaLxSFsX0nGIiM07BbNVsBbsX1dG8AmGOmSu8baPrVYL0cOqoYN4tRWUj1UjUbH1Ij/pubhtml"
 PUBLISHED_SHEET_TAB_RE = re.compile(
     r'items\.push\(\{name:\s*"([^"]+)",\s*pageUrl:\s*"([^"]+)",\s*gid:\s*"([^"]+)"',
     re.IGNORECASE,

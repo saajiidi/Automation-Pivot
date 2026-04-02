@@ -30,14 +30,7 @@ def inject_base_styles():
         letter-spacing: -0.02em;
     }
 
-    /* PERIOD SELECTOR CARD */
-    .period-selector {
-        background: rgba(37, 99, 235, 0.05) !important;
-        padding: 1.5rem !important;
-        border-radius: 12px !important;
-        border: 1px solid rgba(37, 99, 235, 0.2) !important;
-        margin-bottom: 2rem !important;
-    }
+
     .period-status {
         font-size: 0.85rem !important;
         background: #2563eb !important;
@@ -142,6 +135,35 @@ def inject_base_styles():
     @keyframes simpleFade {
         from { opacity: 0; transform: translateY(5px); }
         to { opacity: 1; transform: translateY(0); }
+    }
+    /* STICKY FOOTER SYSTEM */
+    .app-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: var(--background-color);
+        color: var(--text-color);
+        text-align: center;
+        padding: 0.75rem 0;
+        font-size: 0.8rem;
+        border-top: 1px solid rgba(128, 128, 128, 0.1);
+        z-index: 999999; /* Ensure it stays above everything */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+    }
+
+    /* Hide Default Streamlit Branding */
+    footer {visibility: hidden !important;}
+    #MainMenu {visibility: hidden !important;}
+
+    /* Add padding to the main app container so content isn't cut off at the bottom */
+    .main .block-container {
+        padding-bottom: 100px !important;
     }
 </style>"""
     st.markdown(styles, unsafe_allow_html=True)
@@ -294,7 +316,7 @@ def render_date_range_selector(key_prefix: str):
     """Standardized date range selector with high-visibility feedback."""
     from datetime import date, timedelta
     
-    st.markdown("""<div class="period-selector">""", unsafe_allow_html=True)
+
     st.markdown("#### 📅 Select Analysis Period")
     
     # Presets Row
@@ -323,7 +345,7 @@ def render_date_range_selector(key_prefix: str):
     end = c2.date_input("Analysis To", value=st.session_state.cust_end, key=f"{key_prefix}_end_in")
     
     st.markdown(f"""<div class='period-status'>⚡ DASHBOARD ACTIVE: {start.strftime('%d %b %Y')} to {end.strftime('%d %b %Y')}</div>""", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+
     
     if start != st.session_state.cust_start or end != st.session_state.cust_end:
         st.session_state.cust_start = start
@@ -389,3 +411,17 @@ def show_last_updated(path: str):
         "%Y-%m-%d %H:%M:%S"
     )
     st.caption(f"Last updated: {updated}")
+
+
+def render_footer():
+    """Universal premium footer."""
+    footer_html = f"""
+    <div class="app-footer">
+        <span>© 2026 Sajid Islam</span>
+        <span style="opacity: 0.4;">•</span>
+        <span>Powered by</span>
+        <img src="https://cdn.brandfetch.io/deencommerce.com" style="height: 16px; border-radius: 3px;">
+        <span style="font-weight: 700; letter-spacing: 0.05em;">DEEN COMMERCE</span>
+    </div>
+    """
+    st.markdown(footer_html, unsafe_allow_html=True)

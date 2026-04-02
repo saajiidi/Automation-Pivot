@@ -154,6 +154,11 @@ def process_data(df, selected_cols):
                 "avg_basket_value": og["Total Amount"].mean(),
                 "total_orders": len(og),
             }
+            
+            # USER REQUEST: Order number should count total unique phone numbers
+            phone_col = selected_cols.get("phone")
+            if phone_col and phone_col in df.columns:
+                bk["total_orders"] = df[phone_col].nunique()
 
         return drill, summ, top_products, tf, bk, df, top_customers
     except Exception as e:
@@ -337,7 +342,7 @@ def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=Non
 def render_live_tab():
     from src.ui.components import render_status_strip, render_action_bar
     section_card(
-        "📡 Live Stream", "Real-time performance synchronized with LastDaySales."
+        "📡 Live Stream", "Real-time performance synchronized with current active records."
     )
     
     p_click, _ = render_action_bar("🔄 Force Manual Sync", "live_sync_btn")
@@ -352,14 +357,9 @@ def render_live_tab():
         
         mc = find_columns(df)
         
-        # --- NEW: FILTER TO LAST DAY ONLY ---
+        # --- AUTO-SYNC DATA PROCESSING ---
         if mc.get("date") in df.columns:
             df[mc["date"]] = parse_dates(df[mc["date"]])
-            latest_date = df[mc["date"]].max()
-            if pd.notna(latest_date):
-                target_date = latest_date.date()
-                df = df[df[mc["date"]].dt.date == target_date].copy()
-                st.info(f"📅 Showing Live Data for: **{target_date.strftime('%d %b %Y')}** (Most Recent Activity)")
         
         # Precomputed KPI Snapshot Check
         from src.core.paths import CACHE_DIR

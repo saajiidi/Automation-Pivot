@@ -28,7 +28,7 @@ def run_app():
         render_data_completeness_report
     )
     from src.modules.woo_report import render_wp_api_orders_tab
-    from src.ui.components import inject_base_styles, render_header
+    from src.ui.components import inject_base_styles, render_header, render_footer
     from src.modules.whatsapp import render_whatsapp_api_tab
     from src.modules.ecommerce import render_wp_tab
 
@@ -143,9 +143,8 @@ def run_app():
             else:
                 st.success("System core stable. 0 anomalies detected.")
 
-    # Footer
-    st.markdown("---")
-    st.caption("© 2026 DEEN COMMERCE • Powered by Antigravity AI Engine")
+    # Premium Sticky Footer
+    render_footer()
 
 
 if __name__ == "__main__":
