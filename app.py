@@ -56,9 +56,15 @@ def run_app():
         render_data_quality_monitor_tab,
     )
     from src.modules.woo_report import render_wp_api_orders_tab
-    from src.ui.components import inject_base_styles, render_header
+    from src.ui.components import (
+        inject_base_styles,
+        render_header,
+        render_sidebar_shell,
+        render_sidebar_workspace_control,
+        render_footer,
+    )
     from src.modules.whatsapp import render_whatsapp_api_tab
-    from src.modules.ecommerce import render_wp_tab
+    from src.ui.bike_animation import render_bike_animation
 
     init_state()
     inject_base_styles()

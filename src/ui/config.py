@@ -1,5 +1,5 @@
 APP_TITLE = "Automation Pivot"
-APP_VERSION = "v8.1"
+APP_VERSION = "2.5.0"
 
 PRIMARY_NAV = [
     "📡 Live Stream",

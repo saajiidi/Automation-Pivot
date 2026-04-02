@@ -183,8 +183,8 @@ def process_data(df, selected_cols):
         return None, None, None, "", {}, None, None
 
 
-def render_story_summary(summ, tp, timeframe, bk):
-    """Compact summary strip."""
+def render_story_summary(summ, tp, timeframe, bk, sm=None, deltas=None, cust_metrics=None):
+    """Compact summary strip with automated insights."""
     if summ is None or summ.empty:
         return
 
@@ -232,6 +232,70 @@ def render_story_summary(summ, tp, timeframe, bk):
                 <div style="font-size:0.72rem; color:var(--accent-strong); font-weight:800; text-transform:uppercase; letter-spacing:0.12em; margin-bottom:0.65rem;">System Insights & Suggestions</div>
                 <div style="display:flex; flex-direction:column; gap:0.65rem;">
                     {"".join(f"<div style='font-size:0.88rem; color:var(--text-strong);'> {i}</div>" for i in ins)}
+                </div>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+
+
+def render_automated_insights(df, summary, basket, deltas=None, cust_metrics=None):
+    """Render automated insights panel based on data analysis."""
+    insights = []
+    
+    # Revenue insights
+    if summary is not None and not summary.empty:
+        total_rev = summary["Total Amount"].sum()
+        total_qty = summary["Total Qty"].sum()
+        
+        if deltas and deltas.get("rev") is not None:
+            rev_change = deltas["rev"]
+            if rev_change > 15:
+                insights.append(f"🟢 **Strong Growth**: Revenue up {rev_change:.1f}% vs previous period")
+            elif rev_change < -15:
+                insights.append(f"🔴 **Declining**: Revenue down {abs(rev_change):.1f}% - review pricing/promotions")
+        
+        # Top category insight
+        top_cat = summary.sort_values("Total Amount", ascending=False).iloc[0]
+        cat_share = (top_cat["Total Amount"] / max(total_rev, 1)) * 100
+        insights.append(f"📊 **Top Category**: {top_cat['Category']} drives {cat_share:.1f}% of revenue")
+    
+    # Customer insights
+    if cust_metrics:
+        retention = cust_metrics.get("retention", 0)
+        if retention < 20:
+            insights.append("💡 **Retention Alert**: Low repeat rate. Consider loyalty program")
+        elif retention > 40:
+            insights.append("✨ **Healthy Loyalty**: Strong customer retention detected")
+        
+        avg_clv = cust_metrics.get("avg_clv", 0)
+        if avg_clv > 3000:
+            insights.append(f"💰 **Premium Base**: High CLV of TK {avg_clv:,.0f} per customer")
+    
+    # Basket insights
+    if basket:
+        avg_qty = basket.get("avg_basket_qty", 0)
+        avg_value = basket.get("avg_basket_value", 0)
+        
+        if avg_qty < 1.5:
+            insights.append(f"🛒 **Upsell Opportunity**: Low basket size ({avg_qty:.1f} items) - bundle suggestions may help")
+        
+        if avg_value > 5000:
+            insights.append(f"💎 **High AOV**: Average order value of TK {avg_value:,.0f}")
+    
+    # Data quality insight
+    if df is not None:
+        row_count = len(df)
+        insights.append(f"📈 **Dataset**: {row_count:,} records analyzed")
+    
+    # Render insights if any
+    if insights:
+        st.markdown(
+            f"""
+            <div style="background:var(--accent-soft); border:1px solid #bfdbfe; border-radius:18px; padding:1.15rem; margin-bottom:1.25rem;">
+                <div style="font-size:0.72rem; color:var(--accent-strong); font-weight:800; text-transform:uppercase; letter-spacing:0.12em; margin-bottom:0.65rem;">🤖 Automated Insights</div>
+                <div style="display:flex; flex-direction:column; gap:0.65rem;">
+                    {"".join(f"<div style='font-size:0.88rem; color:var(--text-strong);'>{i}</div>" for i in insights)}
                 </div>
             </div>
             """, 

@@ -6,6 +6,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO_ROOT / "data"
 FEEDBACK_DIR = DATA_DIR / "feedback"
 INCOMING_DIR = DATA_DIR / "incoming"
+LOGS_DIR = DATA_DIR / "logs"
 
 # Cache Directories
 CACHE_DIR = DATA_DIR / "cache"
@@ -36,6 +37,7 @@ def prepare_data_dirs():
     """Ensure data dirs exist and migrate legacy locations when possible."""
     DATA_DIR.mkdir(exist_ok=True)
     CACHE_DIR.mkdir(exist_ok=True)
+    LOGS_DIR.mkdir(exist_ok=True)
     GSHEETS_CACHE_DIR.mkdir(exist_ok=True)
     GSHEETS_RAW_DIR.mkdir(exist_ok=True)
     GSHEETS_NORM_DIR.mkdir(exist_ok=True)

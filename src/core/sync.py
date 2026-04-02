@@ -11,6 +11,18 @@ from src.utils.io import fetch_remote_csv_raw
 from src.core.paths import GSHEETS_RAW_DIR, GSHEETS_NORM_DIR, GSHEETS_MANIFEST
 
 DEFAULT_GSHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTBDukmkRJGgHjCRIAAwGmlWaiPwESXSp9UBXm3_sbs37bk2HxavPc62aobmL1cGWUfAKE4Zd6yJySO/pubhtml"
+
+# Live sales tab configuration
+LIVE_SALES_TAB_NAME = "LatestSales"
+LIVE_SALES_TAB_ALIASES = {
+    "latestsales",
+    "lastdaysales",
+    "live",
+    "latest_sales",
+    "last_day_sales",
+    "current",
+}
+
 PUBLISHED_SHEET_TAB_RE = re.compile(
     r'items\.push\(\{name:\s*"([^"]+)",\s*pageUrl:\s*"([^"]+)",\s*gid:\s*"([^"]+)"',
     re.IGNORECASE,

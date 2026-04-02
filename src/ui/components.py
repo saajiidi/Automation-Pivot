@@ -52,8 +52,6 @@ def inject_base_styles():
         color: var(--text-strong) !important;
     }
 
-<<<<<<< HEAD
-=======
     .stApp {
         background: transparent !important;
         color: var(--text-strong) !important;
@@ -62,7 +60,7 @@ def inject_base_styles():
     .block-container {
         max-width: 1480px !important;
         padding-top: 1.1rem !important;
-        padding-bottom: 2.4rem !important;
+        padding-bottom: 100px !important;
     }
 
     [data-testid="stHeader"] {
@@ -247,7 +245,6 @@ def inject_base_styles():
         margin-bottom: 1.35rem !important;
         box-shadow: var(--shadow-soft);
     }
->>>>>>> df3c780f1641005fb43fb2ed9ef0f5f2de77a711
 
     .period-status {
         font-size: 0.82rem !important;
@@ -550,20 +547,50 @@ def inject_base_styles():
         from { opacity: 0; transform: translateY(4px); }
         to { opacity: 1; transform: translateY(0); }
     }
-<<<<<<< HEAD
+
+    /* Mobile Responsive Styles */
+    @media (max-width: 768px) {
+        .block-container {
+            max-width: 100% !important;
+            padding: 0.5rem !important;
+        }
+        .ops-kpi-card {
+            margin-bottom: 0.5rem;
+            padding: 0.75rem;
+        }
+        .app-shell-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+        .app-shell-title {
+            font-size: 1.1rem;
+        }
+        .app-shell-chip-row {
+            justify-content: flex-start;
+            width: 100%;
+        }
+    }
+
+    /* Accessibility: Focus Styles */
+    *:focus-visible {
+        outline: 2px solid var(--accent) !important;
+        outline-offset: 2px !important;
+    }
+
     /* STICKY FOOTER SYSTEM */
     .app-footer {
         position: fixed;
         bottom: 0;
         left: 0;
         width: 100%;
-        background: var(--background-color);
-        color: var(--text-color);
+        background: var(--panel-bg-strong);
+        color: var(--text-strong);
         text-align: center;
         padding: 0.75rem 0;
         font-size: 0.8rem;
-        border-top: 1px solid rgba(128, 128, 128, 0.1);
-        z-index: 999999; /* Ensure it stays above everything */
+        border-top: 1px solid var(--panel-border);
+        z-index: 999999;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -575,16 +602,7 @@ def inject_base_styles():
     /* Hide Default Streamlit Branding */
     footer {visibility: hidden !important;}
     #MainMenu {visibility: hidden !important;}
-
-    /* Add padding to the main app container so content isn't cut off at the bottom */
-    .main .block-container {
-        padding-bottom: 100px !important;
-    }
 </style>"""
-=======
-</style>
-"""
->>>>>>> df3c780f1641005fb43fb2ed9ef0f5f2de77a711
     st.markdown(styles, unsafe_allow_html=True)
 
 
@@ -827,19 +845,11 @@ def to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
 
 
 def render_date_range_selector(key_prefix: str):
-<<<<<<< HEAD
     """Standardized date range selector with high-visibility feedback."""
-    from datetime import date, timedelta
-    
 
-    st.markdown("#### 📅 Select Analysis Period")
-    
-    # Presets Row
-=======
     st.markdown("""<div class="period-selector">""", unsafe_allow_html=True)
-    st.markdown("#### Select Analysis Period")
+    st.markdown("#### 📅 Select Analysis Period")
 
->>>>>>> df3c780f1641005fb43fb2ed9ef0f5f2de77a711
     p1, p2, p3, p4 = st.columns(4)
     abs_min = date(2022, 1, 1)
     start_key = f"{key_prefix}_range_start"
@@ -868,19 +878,6 @@ def render_date_range_selector(key_prefix: str):
         st.rerun()
 
     c1, c2 = st.columns(2)
-<<<<<<< HEAD
-    start = c1.date_input("Analysis From", value=st.session_state.cust_start, key=f"{key_prefix}_start_in")
-    end = c2.date_input("Analysis To", value=st.session_state.cust_end, key=f"{key_prefix}_end_in")
-    
-    st.markdown(f"""<div class='period-status'>⚡ DASHBOARD ACTIVE: {start.strftime('%d %b %Y')} to {end.strftime('%d %b %Y')}</div>""", unsafe_allow_html=True)
-
-    
-    if start != st.session_state.cust_start or end != st.session_state.cust_end:
-        st.session_state.cust_start = start
-        st.session_state.cust_end = end
-        st.rerun()
-        
-=======
     start = c1.date_input(
         "Analysis From",
         value=st.session_state[start_key],
@@ -895,12 +892,11 @@ def render_date_range_selector(key_prefix: str):
         st.session_state[end_key] = end
 
     st.markdown(
-        f"""<div class='period-status'>Dashboard Active: {start.strftime('%d %b %Y')} to {end.strftime('%d %b %Y')}</div>""",
+        f"""<div class='period-status'>⚡ DASHBOARD ACTIVE: {start.strftime('%d %b %Y')} to {end.strftime('%d %b %Y')}</div>""",
         unsafe_allow_html=True,
     )
     st.markdown("</div>", unsafe_allow_html=True)
 
->>>>>>> df3c780f1641005fb43fb2ed9ef0f5f2de77a711
     return start, end
 
 
@@ -980,20 +976,18 @@ def show_last_updated(path: str):
     st.caption(f"Last updated: {updated}")
 
 
-<<<<<<< HEAD
 def render_footer():
     """Universal premium footer."""
     footer_html = f"""
     <div class="app-footer">
-        <span>© 2026 Sajid Islam</span>
-        <span style="opacity: 0.4;">•</span>
-        <span>Powered by</span>
-        <img src="https://cdn.brandfetch.io/deencommerce.com" style="height: 16px; border-radius: 3px;">
-        <span style="font-weight: 700; letter-spacing: 0.05em;">DEEN COMMERCE</span>
+        <span>&copy; 2026 DEEN COMMERCE</span>
+        <span style="opacity: 0.4;">&bull;</span>
+        <span>v{APP_VERSION}</span>
     </div>
     """
     st.markdown(footer_html, unsafe_allow_html=True)
-=======
+
+
 def render_reset_confirm(label: str, state_key: str, reset_fn):
     """
     Registers a tool's reset function for the unified sidebar.
@@ -1005,16 +999,16 @@ def render_reset_confirm(label: str, state_key: str, reset_fn):
 
 
 def render_sidebar_workspace_control():
-    """renders the unified workspace control hub in the sidebar."""
+    """Renders the unified workspace control hub in the sidebar."""
     st.divider()
-    st.subheader("Workspace Control", divider="gray")
+    st.subheader("Workspace Control")
     with st.expander("Reset Active Tool Data", expanded=True):
         registered = st.session_state.get("registered_resets", {})
         if not registered:
             st.info("No active tool data found.")
         else:
-            tool_to_wipe = st.selectbox(.
-                "Select tool to clear", list(registeredkeys()), key="sidebar_reset_tool"
+            tool_to_wipe = st.selectbox(
+                "Select tool to clear", list(registered.keys()), key="sidebar_reset_tool"
             )
             if st.button("Reset Tool Now", use_container_width=True, type="primary"):
                 registered[tool_to_wipe]["fn"]()
@@ -1037,4 +1031,3 @@ def render_sidebar_workspace_control():
         if c2.button("No", use_container_width=True):
             st.session_state.confirm_app_reset = False
             st.rerun()
->>>>>>> df3c780f1641005fb43fb2ed9ef0f5f2de77a711
