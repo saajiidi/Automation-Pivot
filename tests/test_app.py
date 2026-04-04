@@ -1,7 +1,7 @@
 import unittest
 
 from app import run_app
-from src.core.paths import prepare_data_dirs, DATA_DIR
+from BackEnd.core.paths import prepare_data_dirs, DATA_DIR
 
 class TestApp(unittest.TestCase):
 

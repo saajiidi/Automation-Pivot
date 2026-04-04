@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from src.services import master_sales
+from BackEnd.services import master_sales
 
 
 class TestMasterSales(unittest.TestCase):
