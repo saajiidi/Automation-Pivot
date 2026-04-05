@@ -47,8 +47,9 @@ def _sanitize_api_error(error_text: str) -> str:
 
 
 class WooCommerceService:
-    def __init__(self):
+    def __init__(self, ui_enabled: bool = True):
         """Initialize connection using Streamlit secrets."""
+        self.ui_enabled = ui_enabled
         try:
             credentials = get_woocommerce_credentials()
             if not credentials:
@@ -62,11 +63,13 @@ class WooCommerceService:
                 timeout=120
             )
         except Exception as e:
-            st.error("WooCommerce API initialization failed. Please verify the store URL and API keys.")
+            if self.ui_enabled:
+                st.error("WooCommerce API initialization failed. Please verify the store URL and API keys.")
             self.wcapi = None
 
     def fetch_orders(self, page: int = 1, per_page: int = 100, status: str = "any", 
-                     after: Optional[str] = None, before: Optional[str] = None) -> List[Dict[str, Any]]:
+                     after: Optional[str] = None, before: Optional[str] = None,
+                     show_errors: bool = True) -> List[Dict[str, Any]]:
         """Fetch orders from WooCommerce API."""
         if not self.wcapi:
             return []
@@ -85,21 +88,34 @@ class WooCommerceService:
         if response.status_code == 200:
             return response.json()
         else:
-            st.error(f"Failed to fetch orders: {response.status_code} - {_sanitize_api_error(response.text)}")
+            if self.ui_enabled and show_errors:
+                st.error(f"Failed to fetch orders: {response.status_code} - {_sanitize_api_error(response.text)}")
             return []
 
-    def fetch_all_historical_orders(self, after: Optional[str] = None, before: Optional[str] = None, status: str = "any") -> pd.DataFrame:
+    def fetch_all_historical_orders(
+        self,
+        after: Optional[str] = None,
+        before: Optional[str] = None,
+        status: str = "any",
+        show_progress: bool = True,
+        show_errors: bool = True,
+    ) -> pd.DataFrame:
         """Fetch all historical orders recursively."""
         all_orders = []
         page = 1
-        
-        # Progress bar placeholder
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+        progress_bar = st.progress(0) if self.ui_enabled and show_progress else None
+        status_text = st.empty() if self.ui_enabled and show_progress else None
         
         while True:
-            status_text.text(f"Fetching page {page} with status '{status}'...")
-            orders = self.fetch_orders(page=page, after=after, before=before, status=status)
+            if status_text is not None:
+                status_text.text(f"Fetching page {page} with status '{status}'...")
+            orders = self.fetch_orders(
+                page=page,
+                after=after,
+                before=before,
+                status=status,
+                show_errors=show_errors,
+            )
             if not orders:
                 break
                 
@@ -110,7 +126,8 @@ class WooCommerceService:
             if page > 1000: 
                 break
         
-        status_text.text(f"Processing {len(all_orders)} orders...")
+        if status_text is not None:
+            status_text.text(f"Processing {len(all_orders)} orders...")
         return self.process_orders_to_df(all_orders)
 
     def process_orders_to_df(self, orders: List[Dict[str, Any]]) -> pd.DataFrame:
@@ -210,7 +227,7 @@ class WooCommerceService:
             return response.json()
         return []
 
-    def get_stock_report(self) -> pd.DataFrame:
+    def get_stock_report(self, show_errors: bool = True) -> pd.DataFrame:
         """Fetch all published products and extract stock counts using pagination headers."""
         if not self.wcapi:
             return pd.DataFrame()
@@ -227,7 +244,8 @@ class WooCommerceService:
             })
             
             if response.status_code != 200:
-                st.error(f"Failed to fetch products: {response.status_code} - {_sanitize_api_error(response.text)}")
+                if self.ui_enabled and show_errors:
+                    st.error(f"Failed to fetch products: {response.status_code} - {_sanitize_api_error(response.text)}")
                 break
             
             products = response.json()

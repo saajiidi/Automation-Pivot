@@ -57,6 +57,10 @@ def generate_customer_insights(
 ) -> pd.DataFrame:
     # Customer insights exclusively use WooCommerce for live data (ignoring Google Sheets)
     df = load_hybrid_data(start_date, end_date, include_gsheet=False, include_woocommerce=include_woocommerce)
+    return generate_customer_insights_from_sales(df)
+
+
+def generate_customer_insights_from_sales(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
 

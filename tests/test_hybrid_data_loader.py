@@ -12,7 +12,7 @@ class _FakeWooService:
     def __init__(self):
         self.calls = []
 
-    def fetch_all_historical_orders(self, after=None, before=None, status="any"):
+    def fetch_all_historical_orders(self, after=None, before=None, status="any", show_progress=True, show_errors=True):
         self.calls.append({"after": after, "before": before, "status": status})
         return pd.DataFrame(
             {
@@ -26,7 +26,7 @@ class _FakeWooService:
             }
         )
 
-    def get_stock_report(self):
+    def get_stock_report(self, show_errors=True):
         return pd.DataFrame(
             {
                 "ID": [1],
@@ -57,24 +57,27 @@ class TestHybridDataLoader(unittest.TestCase):
     def test_woocommerce_loader_respects_selected_date_range(self):
         fake_service = _FakeWooService()
 
-        with (
-            patch.object(
-                hybrid_data_loader.st,
-                "secrets",
-                {
-                    "woocommerce": {
-                        "store_url": "https://example.com",
-                        "consumer_key": "ck_test",
-                        "consumer_secret": "cs_test",
-                    }
-                },
-            ),
-            patch("BackEnd.services.woocommerce_service.WooCommerceService", return_value=fake_service),
-        ):
-            df = hybrid_data_loader.load_woocommerce_live_data(
-                start_date="2026-04-01",
-                end_date="2026-04-05",
-            )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir)
+            with (
+                patch.object(hybrid_data_loader, "_cache_file", side_effect=lambda name: cache_dir / name),
+                patch.object(
+                    hybrid_data_loader.st,
+                    "secrets",
+                    {
+                        "woocommerce": {
+                            "store_url": "https://example.com",
+                            "consumer_key": "ck_test",
+                            "consumer_secret": "cs_test",
+                        }
+                    },
+                ),
+                patch("BackEnd.services.woocommerce_service.WooCommerceService", return_value=fake_service),
+            ):
+                df = hybrid_data_loader.load_woocommerce_live_data(
+                    start_date="2026-04-01",
+                    end_date="2026-04-05",
+                )
 
         self.assertFalse(df.empty)
         self.assertEqual(len(fake_service.calls), 1)
@@ -84,21 +87,24 @@ class TestHybridDataLoader(unittest.TestCase):
     def test_woocommerce_stock_loader_uses_api_and_normalizes_numbers(self):
         fake_service = _FakeWooService()
 
-        with (
-            patch.object(
-                hybrid_data_loader.st,
-                "secrets",
-                {
-                    "woocommerce": {
-                        "store_url": "https://example.com",
-                        "consumer_key": "ck_test",
-                        "consumer_secret": "cs_test",
-                    }
-                },
-            ),
-            patch("BackEnd.services.woocommerce_service.WooCommerceService", return_value=fake_service),
-        ):
-            df = hybrid_data_loader.load_woocommerce_stock_data()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir)
+            with (
+                patch.object(hybrid_data_loader, "_cache_file", side_effect=lambda name: cache_dir / name),
+                patch.object(
+                    hybrid_data_loader.st,
+                    "secrets",
+                    {
+                        "woocommerce": {
+                            "store_url": "https://example.com",
+                            "consumer_key": "ck_test",
+                            "consumer_secret": "cs_test",
+                        }
+                    },
+                ),
+                patch("BackEnd.services.woocommerce_service.WooCommerceService", return_value=fake_service),
+            ):
+                df = hybrid_data_loader.load_woocommerce_stock_data()
 
         self.assertEqual(len(df), 1)
         self.assertEqual(float(df.loc[0, "Stock Quantity"]), 7.0)
@@ -170,6 +176,72 @@ class TestHybridDataLoader(unittest.TestCase):
             self.assertFalse(df.empty)
             self.assertEqual(len(df), 1)
             mock_service.assert_not_called()
+
+    def test_orders_cache_status_reports_fresh_local_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir)
+            pd.DataFrame(
+                {
+                    "order_id": ["1001"],
+                    "order_date": ["2026-04-02 10:00:00"],
+                    "customer_key": ["cust_1"],
+                    "order_total": [1200],
+                    "qty": [1],
+                    "order_item_key": ["1001::polo"],
+                    "source": ["woocommerce_api"],
+                }
+            ).to_parquet(cache_dir / "woo_orders.parquet", index=False)
+            (cache_dir / "woo_orders_meta.json").write_text(
+                """
+                {
+                  "cached_start": "2026-04-01 00:00:00",
+                  "cached_end": "2026-04-05 23:59:59",
+                  "fetched_at": "2099-04-05 12:00:00"
+                }
+                """,
+                encoding="utf-8",
+            )
+
+            with patch.object(hybrid_data_loader, "_cache_file", side_effect=lambda name: cache_dir / name):
+                status = hybrid_data_loader.get_woocommerce_orders_cache_status(
+                    start_date="2026-04-01",
+                    end_date="2026-04-05",
+                )
+
+            self.assertTrue(status["cache_exists"])
+            self.assertTrue(status["is_covered"])
+            self.assertTrue(status["is_fresh"])
+            self.assertFalse(status["needs_refresh"])
+
+    def test_start_orders_background_refresh_spawns_worker_when_needed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir)
+            with (
+                patch.object(hybrid_data_loader, "_cache_file", side_effect=lambda name: cache_dir / name),
+                patch.object(
+                    hybrid_data_loader,
+                    "get_woocommerce_credentials",
+                    return_value={
+                        "store_url": "https://example.com",
+                        "consumer_key": "ck_test",
+                        "consumer_secret": "cs_test",
+                    },
+                ),
+                patch.object(
+                    hybrid_data_loader,
+                    "get_woocommerce_orders_cache_status",
+                    return_value={"is_running": False, "needs_refresh": True},
+                ),
+                patch.object(hybrid_data_loader, "_spawn_refresh_worker", return_value=True) as mock_spawn,
+            ):
+                started = hybrid_data_loader.start_orders_background_refresh(
+                    start_date="2026-04-01",
+                    end_date="2026-04-05",
+                )
+
+            self.assertTrue(started)
+            mock_spawn.assert_called_once()
+            self.assertTrue((cache_dir / "orders_refresh.lock").exists())
 
 
 if __name__ == "__main__":

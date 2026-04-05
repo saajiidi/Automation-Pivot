@@ -9,14 +9,18 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from BackEnd.services.customer_insights import generate_customer_insights
+from BackEnd.services.customer_insights import generate_customer_insights_from_sales
 from BackEnd.services.hybrid_data_loader import (
     estimate_woocommerce_load_time,
     get_data_summary,
+    get_woocommerce_orders_cache_status,
+    get_woocommerce_stock_cache_status,
     load_comparison_data,
     load_hybrid_data,
     load_live_stream_data,
-    load_woocommerce_stock_data,
+    load_cached_woocommerce_stock_data,
+    start_orders_background_refresh,
+    start_stock_background_refresh,
 )
 from BackEnd.services.ml_insights import build_ml_insight_bundle
 from BackEnd.utils.sales_schema import ensure_sales_schema
@@ -64,51 +68,82 @@ def render_dashboard_tab():
         st.markdown("<div style='height: 1.75rem;'></div>", unsafe_allow_html=True)
         load_clicked = st.button("Refresh Data", use_container_width=True, type="primary")
 
-    st.caption(estimate_woocommerce_load_time(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")))
+    start_date_str = start_date.strftime("%Y-%m-%d")
+    end_date_str = end_date.strftime("%Y-%m-%d")
+    st.caption(estimate_woocommerce_load_time(start_date_str, end_date_str))
 
-    should_load = load_clicked or "dashboard_data" not in st.session_state
-    if should_load or "dashboard_data" in st.session_state:
+    orders_status = get_woocommerce_orders_cache_status(start_date_str, end_date_str)
+    stock_status = get_woocommerce_stock_cache_status()
+    if include_woo:
+        orders_started = start_orders_background_refresh(start_date_str, end_date_str, force=load_clicked)
+        stock_started = start_stock_background_refresh(force=load_clicked)
+        if orders_started:
+            orders_status = get_woocommerce_orders_cache_status(start_date_str, end_date_str)
+        if stock_started:
+            stock_status = get_woocommerce_stock_cache_status()
+
+    request_signature = {
+        "start_date": start_date_str,
+        "end_date": end_date_str,
+        "include_gsheet": include_gsheet,
+        "include_woo": include_woo,
+        "live_source": live_source,
+    }
+    cache_signature = "|".join(
+        [
+            str(orders_status.get("last_refresh", "")),
+            str(orders_status.get("is_running", False)),
+            str(stock_status.get("last_refresh", "")),
+            str(stock_status.get("is_running", False)),
+        ]
+    )
+    should_load = (
+        load_clicked
+        or "dashboard_data" not in st.session_state
+        or st.session_state.get("dashboard_request_signature") != request_signature
+        or st.session_state.get("dashboard_cache_signature") != cache_signature
+    )
+    if should_load:
         try:
             # Main Sales DF (can be Merged for Trends/Geo)
             df_sales = ensure_sales_schema(
                 load_hybrid_data(
-                    start_date=start_date.strftime("%Y-%m-%d"),
-                    end_date=end_date.strftime("%Y-%m-%d"),
+                    start_date=start_date_str,
+                    end_date=end_date_str,
                     include_gsheet=include_gsheet,
                     include_woocommerce=include_woo,
+                    woocommerce_mode="cache_only",
                 )
             )
             
             # Restricted DF for Product/Customer Analysis (WooCommerce Only)
             df_woo_only = ensure_sales_schema(
                 load_hybrid_data(
-                    start_date=start_date.strftime("%Y-%m-%d"),
-                    end_date=end_date.strftime("%Y-%m-%d"),
+                    start_date=start_date_str,
+                    end_date=end_date_str,
                     include_gsheet=False,
                     include_woocommerce=True,
+                    woocommerce_mode="cache_only",
                 )
             )
             
-            df_customers = generate_customer_insights(
-                start_date=start_date.strftime("%Y-%m-%d"),
-                end_date=end_date.strftime("%Y-%m-%d"),
-                include_woocommerce=True,
-            )
+            df_customers = generate_customer_insights_from_sales(df_woo_only)
             if df_sales.empty:
-                st.warning("No sales data found for the selected date range.")
-                return
+                if not include_woo and include_gsheet:
+                    st.warning("No sales data found for the selected date range.")
+                    return
             st.session_state.dashboard_data = {
                 "sales": df_sales,
                 "woo_only": df_woo_only,
                 "customers": df_customers,
-                "summary": get_data_summary(),
+                "summary": get_data_summary(woocommerce_mode="cache_only"),
                 "ml": build_ml_insight_bundle(df_woo_only, df_customers, horizon_days=7),
-                "stock": load_woocommerce_stock_data(),
-                "loaded_from_cache_hint": estimate_woocommerce_load_time(
-                    start_date.strftime("%Y-%m-%d"),
-                    end_date.strftime("%Y-%m-%d"),
-                ),
+                "stock": load_cached_woocommerce_stock_data(),
+                "loaded_from_cache_hint": orders_status.get("status_message", ""),
+                "stock_cache_hint": stock_status.get("status_message", ""),
             }
+            st.session_state.dashboard_request_signature = request_signature
+            st.session_state.dashboard_cache_signature = cache_signature
         except Exception as exc:
             log_error(exc, context="Dashboard Load")
             st.error(f"Error loading dashboard data: {exc}")
@@ -126,6 +161,11 @@ def render_dashboard_tab():
     ml_bundle = data.get("ml", {})
     stock_df = data.get("stock", pd.DataFrame())
     st.caption(data.get("loaded_from_cache_hint", ""))
+    st.caption(data.get("stock_cache_hint", ""))
+    if orders_status.get("is_running") or stock_status.get("is_running"):
+        st.info("Background sync is running. The dashboard is using local cached data now and will pick up fresher WooCommerce data on the next rerun.")
+    elif include_woo and df_woo_only.empty and not orders_status.get("cache_exists"):
+        st.info("WooCommerce cache is being prepared. Historical and sheet-backed views can open first, and WooCommerce-only tabs will fill in after the background sync completes.")
 
     tabs = st.tabs([
         "Business Intelligence",
