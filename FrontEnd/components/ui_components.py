@@ -171,6 +171,38 @@ def inject_base_styles():
             margin-bottom: 0.45rem;
             line-height: 1.5;
         }
+        .bi-kpi-note {
+            margin-top: 0.4rem;
+            padding: 0.34rem 0.58rem;
+            border-radius: 999px;
+            display: inline-block;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--primary-strong);
+            background: rgba(15, 76, 129, 0.08);
+            border: 1px solid rgba(15, 76, 129, 0.10);
+        }
+        .bi-audit-card {
+            background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(244,248,251,0.98) 100%);
+            border: 1px solid var(--border-soft);
+            border-radius: 20px;
+            box-shadow: var(--card-shadow-soft);
+            padding: 1rem 1.1rem;
+            margin-bottom: 1rem;
+        }
+        .bi-audit-title {
+            font-size: 0.76rem;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-bottom: 0.55rem;
+        }
+        .bi-audit-body {
+            color: var(--text-strong);
+            line-height: 1.6;
+            font-size: 0.92rem;
+        }
         [data-testid="stMetricContainer"] {
             background: rgba(255,255,255,0.80);
             border: 1px solid var(--border-soft);
@@ -455,6 +487,26 @@ def render_commentary_panel(title: str, bullet_points: list[str]):
         <div class="bi-commentary">
           <div class="bi-commentary-label">{title}</div>
           <ul>{items}</ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_kpi_note(note: str):
+    if not note:
+        return
+    st.markdown(f'<div class="bi-kpi-note">{note}</div>', unsafe_allow_html=True)
+
+
+def render_audit_card(title: str, body: str):
+    if not title or not body:
+        return
+    st.markdown(
+        f"""
+        <div class="bi-audit-card">
+          <div class="bi-audit-title">{title}</div>
+          <div class="bi-audit-body">{body}</div>
         </div>
         """,
         unsafe_allow_html=True,

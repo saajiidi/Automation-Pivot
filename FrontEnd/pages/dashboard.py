@@ -10,16 +10,22 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from BackEnd.services.customer_insights import generate_customer_insights
-from BackEnd.services.hybrid_data_loader import get_data_summary, load_hybrid_data
+from BackEnd.services.hybrid_data_loader import (
+    get_data_summary,
+    load_comparison_data,
+    load_hybrid_data,
+    load_live_stream_data,
+)
 from BackEnd.services.ml_insights import build_ml_insight_bundle
 from BackEnd.utils.sales_schema import ensure_sales_schema
 from FrontEnd.components.ui_components import (
+    render_audit_card,
     render_bi_hero,
     render_commentary_panel,
+    render_kpi_note,
     render_section_card,
 )
 from FrontEnd.utils.error_handler import log_error
-
 
 
 def render_dashboard_tab():
@@ -57,6 +63,7 @@ def render_dashboard_tab():
 
     if load_clicked or "dashboard_data" in st.session_state:
         try:
+            # Main Sales DF (can be Merged for Trends/Geo)
             df_sales = ensure_sales_schema(
                 load_hybrid_data(
                     start_date=start_date.strftime("%Y-%m-%d"),
@@ -65,20 +72,31 @@ def render_dashboard_tab():
                     include_woocommerce=include_woo,
                 )
             )
+            
+            # Restricted DF for Product/Customer Analysis (WooCommerce Only)
+            df_woo_only = ensure_sales_schema(
+                load_hybrid_data(
+                    start_date=start_date.strftime("%Y-%m-%d"),
+                    end_date=end_date.strftime("%Y-%m-%d"),
+                    include_gsheet=False,
+                    include_woocommerce=True,
+                )
+            )
+            
             df_customers = generate_customer_insights(
                 start_date=start_date.strftime("%Y-%m-%d"),
                 end_date=end_date.strftime("%Y-%m-%d"),
-                include_gsheet=include_gsheet,
-                include_woocommerce=include_woo,
+                include_woocommerce=True,
             )
             if df_sales.empty:
                 st.warning("No sales data found for the selected date range.")
                 return
             st.session_state.dashboard_data = {
                 "sales": df_sales,
+                "woo_only": df_woo_only,
                 "customers": df_customers,
                 "summary": get_data_summary(),
-                "ml": build_ml_insight_bundle(df_sales, df_customers, horizon_days=7),
+                "ml": build_ml_insight_bundle(df_woo_only, df_customers, horizon_days=7),
             }
         except Exception as exc:
             log_error(exc, context="Dashboard Load")
@@ -91,24 +109,81 @@ def render_dashboard_tab():
 
     data = st.session_state.dashboard_data
     df_sales = ensure_sales_schema(data["sales"])
+    df_woo_only = ensure_sales_schema(data["woo_only"])
     df_customers = data["customers"]
     summary = data.get("summary", {})
     ml_bundle = data.get("ml", {})
 
-    tabs = st.tabs(["Executive Summary", "Sales Trends", "Product Performance", "Customer Behavior", "Geographic", "Forecast & Alerts"])
+    tabs = st.tabs([
+        "Executive Summary",
+        "Data Audit",
+        "Streaming Comparison",
+        "Sales Trends",
+        "Product Performance",
+        "Customer Behavior",
+        "Geographic",
+        "Forecast & Alerts",
+    ])
     with tabs[0]:
         render_executive_summary(df_sales, df_customers, summary)
     with tabs[1]:
-        render_sales_trends(df_sales)
+        render_data_audit(df_sales, df_customers, start_date, end_date)
     with tabs[2]:
-        render_product_performance(df_sales)
+        render_live_stream_comparison()
     with tabs[3]:
-        render_customer_behavior(df_sales, df_customers)
+        render_sales_trends(df_sales)
     with tabs[4]:
-        render_geographic_insights(df_sales)
+        render_product_performance(df_woo_only) # Restricted to WooCommerce
     with tabs[5]:
+        render_customer_behavior(df_woo_only, df_customers) # Restricted to WooCommerce
+    with tabs[6]:
+        render_geographic_insights(df_sales)
+    with tabs[7]:
         render_forecast_and_alerts(ml_bundle)
 
+
+def render_live_stream_comparison():
+    st.subheader("📡 Live Stream Comparison (Today vs Last Day)")
+    
+    stream_df = load_live_stream_data()
+    compare_df = load_comparison_data()
+    
+    if stream_df.empty:
+        st.warning("Live Stream data is currently empty or unavailable.")
+        return
+        
+    s_rev = stream_df["order_total"].sum()
+    s_ord = stream_df["order_id"].nunique()
+    s_qty = stream_df["qty"].sum()
+    
+    c_rev = compare_df["order_total"].sum() if not compare_df.empty else 0
+    c_ord = compare_df["order_id"].nunique() if not compare_df.empty else 0
+    c_qty = compare_df["qty"].sum() if not compare_df.empty else 0
+    
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.metric("Live Revenue", f"TK {s_rev:,.0f}", _pct_delta(s_rev, c_rev, "vs Last Day"))
+    with m2:
+        st.metric("Live Orders", f"{s_ord:,}", _pct_delta(float(s_ord), float(c_ord), "vs Last Day"))
+    with m3:
+        st.metric("Live Units", f"{s_qty:,.0f}", _pct_delta(s_qty, c_qty, "vs Last Day"))
+        
+    st.divider()
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("#### Live Stream Items")
+        if not stream_df.empty:
+            st.dataframe(stream_df[["order_id", "item_name", "qty", "order_total"]].head(50), use_container_width=True, hide_index=True)
+    with c2:
+        st.markdown("#### Live Trends")
+        if "_imported_at" in stream_df.columns:
+            stream_df["_import_time"] = pd.to_datetime(stream_df["_imported_at"], errors="coerce")
+            live_trend = stream_df.groupby(stream_df["_import_time"].dt.hour).agg(Revenue=("order_total", "sum")).reset_index()
+            fig = px.area(live_trend, x="_import_time", y="Revenue", title="Import Activity (Hour)")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Waiting for more stream activity to plot trends.")
 
 
 def render_executive_summary(df_sales: pd.DataFrame, df_customers: pd.DataFrame, summary: dict):
@@ -137,28 +212,36 @@ def render_executive_summary(df_sales: pd.DataFrame, df_customers: pd.DataFrame,
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
         st.metric("Revenue", f"TK {total_revenue:,.0f}", _pct_delta(today_revenue, yesterday_revenue, "today vs yesterday"))
+        render_kpi_note("Counting mode: summed line-item revenue")
     with k2:
         st.metric("Orders", f"{total_orders:,}", _pct_delta(today_orders, yesterday_orders, "today vs yesterday"))
+        render_kpi_note("Counting mode: distinct normalized order_id")
     with k3:
         overall_aov = total_revenue / total_orders if total_orders else 0
         st.metric("AOV", f"TK {overall_aov:,.0f}", _pct_delta(today_aov, yesterday_aov, "today vs yesterday"))
+        render_kpi_note("Counting mode: revenue / distinct orders")
     with k4:
         st.metric("Customers", f"{active_customers:,}")
+        render_kpi_note("Counting mode: distinct customer_key")
     with k5:
         st.metric("Pending", f"{pending_count:,}", "Needs action" if pending_count > 5 else "Healthy")
+        render_kpi_note("Counting mode: pending, processing, on-hold")
 
     s1, s2, s3 = st.columns(3)
     with s1:
         st.metric("Items Sold", f"{total_items:,.0f}")
-        st.caption(f"Historical rows: {summary.get('historical', 0):,} | Woo live rows: {summary.get('woocommerce_live', 0):,}")
+        render_kpi_note("Counting mode: summed qty from visible rows")
+        st.caption(f"Historical: {summary.get('historical', 0):,} | Woo: {summary.get('woocommerce_live', 0):,} | Stream: {summary.get('live_stream', 0):,}")
     with s2:
         repeat_rate = 0.0
         if isinstance(df_customers, pd.DataFrame) and not df_customers.empty and "total_orders" in df_customers.columns:
             repeat_rate = float((df_customers["total_orders"] > 1).mean() * 100)
         st.metric("Repeat Rate", f"{repeat_rate:.1f}%")
+        render_kpi_note("Counting mode: customers with total_orders > 1")
     with s3:
         latest_date = df["order_date"].max()
         st.metric("Latest Order", latest_date.strftime("%Y-%m-%d %H:%M") if pd.notna(latest_date) else "N/A")
+        render_kpi_note("Counting mode: max order_date in filter")
 
     insights = []
     if pending_count > 10:
@@ -178,6 +261,164 @@ def render_executive_summary(df_sales: pd.DataFrame, df_customers: pd.DataFrame,
     render_commentary_panel("Intelligence Commentary", insights)
     render_data_trust_panel(df_sales)
 
+
+def render_data_audit(
+    df_sales: pd.DataFrame,
+    df_customers: pd.DataFrame,
+    start_date: date,
+    end_date: date,
+):
+    st.subheader("Data Audit")
+    df = ensure_sales_schema(df_sales)
+    if df.empty:
+        st.info("No rows are available for audit in the current filter.")
+        return
+
+    audit_df = df.copy()
+    audit_df["order_day"] = audit_df["order_date"].dt.date
+    order_counts = (
+        audit_df[audit_df["order_id"].replace("", pd.NA).notna()]
+        .groupby("order_id")
+        .agg(
+            first_seen=("order_date", "min"),
+            line_items=("order_id", "size"),
+            units=("qty", "sum"),
+            revenue=("order_total", "sum"),
+            sources=("source", lambda s: ", ".join(sorted({str(v) for v in s if str(v).strip()}))),
+        )
+        .reset_index()
+        .sort_values("first_seen", ascending=False)
+    )
+    per_source = (
+        audit_df.groupby("source", dropna=False)
+        .agg(
+            line_items=("order_id", "size"),
+            unique_orders=("order_id", lambda s: s.replace("", pd.NA).dropna().nunique()),
+            revenue=("order_total", "sum"),
+        )
+        .reset_index()
+        .rename(columns={"source": "Source"})
+        .sort_values(["revenue", "line_items"], ascending=False)
+    )
+    per_day = (
+        audit_df.groupby("order_day", dropna=False)
+        .agg(
+            line_items=("order_id", "size"),
+            unique_orders=("order_id", lambda s: s.replace("", pd.NA).dropna().nunique()),
+            customers=("customer_key", lambda s: s.replace("", pd.NA).dropna().nunique()),
+            revenue=("order_total", "sum"),
+        )
+        .reset_index()
+        .sort_values("order_day", ascending=False)
+    )
+    duplicate_orders = (
+        order_counts[order_counts["line_items"] > 1][["order_id", "first_seen", "line_items", "units", "revenue", "sources"]]
+        .head(25)
+    )
+    unique_orders = audit_df["order_id"].replace("", pd.NA).dropna().nunique()
+    unique_customers = audit_df["customer_key"].replace("", pd.NA).dropna().nunique()
+    line_items = len(audit_df)
+    min_ts = audit_df["order_date"].min()
+    max_ts = audit_df["order_date"].max()
+
+    intro = [
+        f"The filter currently requests data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}.",
+        f"The loaded dataset contains {line_items:,} visible rows, {unique_orders:,} distinct orders, and {unique_customers:,} distinct customers after normalization.",
+    ]
+    if pd.notna(min_ts) and pd.notna(max_ts):
+        intro.append(
+            f"The actual timestamps present in the loaded data run from {min_ts.strftime('%Y-%m-%d %H:%M')} to {max_ts.strftime('%Y-%m-%d %H:%M')}."
+        )
+    render_commentary_panel("Audit Guidance", intro)
+
+    a1, a2 = st.columns(2)
+    with a1:
+        render_audit_card(
+            "How Order Counting Works",
+            "Orders are counted using distinct normalized order_id values. If one checkout contains multiple products, it appears as multiple line items but one order.",
+        )
+    with a2:
+        render_audit_card(
+            "How Revenue Counting Works",
+            "Revenue is summed from the visible normalized rows in the current filter. That means product-level tables and trend charts use the same filtered dataset shown below.",
+        )
+
+    metrics = st.columns(5)
+    with metrics[0]:
+        st.metric("Line Items", f"{line_items:,}")
+        render_kpi_note("Every visible row after normalization")
+    with metrics[1]:
+        st.metric("Unique Orders", f"{unique_orders:,}")
+        render_kpi_note("Distinct order_id values")
+    with metrics[2]:
+        st.metric("Unique Customers", f"{unique_customers:,}")
+        render_kpi_note("Distinct customer_key values")
+    with metrics[3]:
+        st.metric("Date Coverage", f"{per_day['order_day'].nunique():,}")
+        render_kpi_note("Distinct days with at least one row")
+    with metrics[4]:
+        st.metric("Sources", f"{audit_df['source'].replace('', pd.NA).dropna().nunique():,}")
+        render_kpi_note("Distinct active source labels")
+
+    st.markdown("#### Validation Tables")
+    c1, c2 = st.columns([1, 1.25])
+    with c1:
+        st.markdown("##### Source Mix")
+        st.dataframe(
+            per_source,
+            use_container_width=True,
+            hide_index=True,
+        )
+    with c2:
+        st.markdown("##### Daily Coverage")
+        st.dataframe(
+            per_day.rename(
+                columns={
+                    "order_day": "Date",
+                    "line_items": "Line Items",
+                    "unique_orders": "Orders",
+                    "customers": "Customers",
+                    "revenue": "Revenue",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    st.markdown("#### Order-Level Validation Sample")
+    st.caption("Use this table to confirm that one order can contain multiple line items while still counting as a single order in KPI cards.")
+    st.dataframe(
+        order_counts.rename(
+            columns={
+                "order_id": "Order ID",
+                "first_seen": "First Seen",
+                "line_items": "Line Items",
+                "units": "Units",
+                "revenue": "Revenue",
+                "sources": "Sources",
+            }
+        ).head(50),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    if not duplicate_orders.empty:
+        st.markdown("#### Multi-Line Orders")
+        st.caption("These are healthy duplicates caused by orders containing more than one item, not double-counted KPI orders.")
+        st.dataframe(
+            duplicate_orders.rename(
+                columns={
+                    "order_id": "Order ID",
+                    "first_seen": "First Seen",
+                    "line_items": "Line Items",
+                    "units": "Units",
+                    "revenue": "Revenue",
+                    "sources": "Sources",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 def render_sales_trends(df: pd.DataFrame):
@@ -236,7 +477,6 @@ def render_sales_trends(df: pd.DataFrame):
         st.plotly_chart(fig_heatmap, use_container_width=True)
 
 
-
 def render_product_performance(df: pd.DataFrame):
     st.subheader("Product Performance")
     if df.empty:
@@ -273,7 +513,6 @@ def render_product_performance(df: pd.DataFrame):
         st.plotly_chart(fig_units, use_container_width=True)
 
     st.dataframe(top_products.rename(columns={"item_name": "Product"}), use_container_width=True, hide_index=True)
-
 
 
 def render_customer_behavior(df_sales: pd.DataFrame, df_customers: pd.DataFrame):
@@ -328,7 +567,6 @@ def render_customer_behavior(df_sales: pd.DataFrame, df_customers: pd.DataFrame)
         st.plotly_chart(fig_scatter, use_container_width=True)
 
 
-
 def render_geographic_insights(df: pd.DataFrame):
     st.subheader("Geographic Insights")
     geo = df.copy()
@@ -358,7 +596,6 @@ def render_geographic_insights(df: pd.DataFrame):
         fig_orders = px.bar(geo_sales.sort_values("Orders"), x="Orders", y="region", orientation="h", title="Orders by Region", color="Orders", color_continuous_scale="Oranges")
         fig_orders.update_layout(height=400, yaxis_title="Region")
         st.plotly_chart(fig_orders, use_container_width=True)
-
 
 
 def render_forecast_and_alerts(ml_bundle: dict[str, pd.DataFrame]):
@@ -496,12 +733,16 @@ def render_data_trust_panel(df_sales: pd.DataFrame):
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             st.metric("Line Items", f"{line_items:,}")
+            render_kpi_note("Visible normalized rows")
         with c2:
             st.metric("Unique Orders", f"{unique_orders:,}")
+            render_kpi_note("Distinct order_id")
         with c3:
             st.metric("Unique Customers", f"{unique_customers:,}")
+            render_kpi_note("Distinct customer_key")
         with c4:
             st.metric("Sources", f"{len(active_sources):,}")
+            render_kpi_note("Active source labels")
 
         preview_cols = [col for col in ["order_date", "order_id", "item_name", "qty", "order_total", "source"] if col in df.columns]
         st.caption("Sample rows from the exact filtered dataset used in the KPIs above.")

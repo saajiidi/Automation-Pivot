@@ -53,10 +53,10 @@ def generate_customer_id(email: str, phone: str, order_id: str = "") -> str:
 def generate_customer_insights(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    include_gsheet: bool = True,
     include_woocommerce: bool = True,
 ) -> pd.DataFrame:
-    df = load_hybrid_data(start_date, end_date, include_gsheet, include_woocommerce)
+    # Customer insights exclusively use WooCommerce for live data (ignoring Google Sheets)
+    df = load_hybrid_data(start_date, end_date, include_gsheet=False, include_woocommerce=include_woocommerce)
     if df.empty:
         return pd.DataFrame()
 

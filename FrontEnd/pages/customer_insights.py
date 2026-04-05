@@ -22,15 +22,8 @@ def render_customer_insight_tab():
 
     with st.sidebar:
         st.subheader("Data Connectors")
-        live_source = st.radio(
-            "Primary Live Source",
-            ["WooCommerce API Only", "Merged (Woo + Sheets)", "Google Sheets Only"],
-            index=0,
-            key="insight_live_source",
-        )
-
-    include_gsheet = live_source in {"Merged (Woo + Sheets)", "Google Sheets Only"}
-    include_woo = live_source in {"Merged (Woo + Sheets)", "WooCommerce API Only"}
+        st.info("Customer insights are exclusively powered by WooCommerce API & Historical data for maximum accuracy.")
+        include_woo = True
 
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
@@ -60,7 +53,6 @@ def render_customer_insight_tab():
             df_insights = generate_customer_insights(
                 start_date=start_date.strftime("%Y-%m-%d"),
                 end_date=end_date.strftime("%Y-%m-%d"),
-                include_gsheet=include_gsheet,
                 include_woocommerce=include_woo,
             )
             if df_insights.empty:

@@ -16,6 +16,8 @@ from FrontEnd.utils.error_handler import log_error
 
 DATA_FILE = Path(__file__).parent.parent.parent / "data" / "data.parquet"
 LIVE_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOiRkybNzMNvEaLxSFsX0nGIiM07BbNVsBbsX1dG8AmGOmSu8baPrVYL0cOqoYN4tRWUj1UjUbH1Ij/pub?gid=2118542421&single=true&output=csv"
+LIVE_STREAM_URL = "https://docs.google.com/spreadsheets/d/1QQX4gDIEurTDkiyXcK1SO2-oYNqarhEg1fqRCVHspQw/export?format=csv&gid=2118542421"
+COMPARISON_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOiRkybNzMNvEaLxSFsX0nGIiM07BbNVsBbsX1dG8AmGOmSu8baPrVYL0cOqoYN4tRWUj1UjUbH1Ij/pub?gid=2136999354&single=true&output=csv"
 
 
 @st.cache_data(ttl=900)
@@ -72,6 +74,39 @@ def load_live_2026_data() -> pd.DataFrame:
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=900)
+def load_live_stream_data() -> pd.DataFrame:
+    """Load exclusive Live Stream data."""
+    try:
+        response = requests.get(LIVE_STREAM_URL, timeout=60)
+        response.raise_for_status()
+        df = pd.read_csv(BytesIO(response.content))
+        if df.empty:
+            return df
+        df["_source"] = "live_stream_gsheet"
+        df["_imported_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return ensure_sales_schema(df)
+    except Exception as exc:
+        log_error(exc, context="Hybrid Loader - Live Stream", details={"url": LIVE_STREAM_URL})
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=900)
+def load_comparison_data() -> pd.DataFrame:
+    """Load Comparison data for Today vs Last Day analysis."""
+    try:
+        response = requests.get(COMPARISON_SHEET_URL, timeout=60)
+        response.raise_for_status()
+        df = pd.read_csv(BytesIO(response.content))
+        if df.empty:
+            return df
+        df["_source"] = "comparison_gsheet"
+        return ensure_sales_schema(df)
+    except Exception as exc:
+        log_error(exc, context="Hybrid Loader - Comparison Sheet", details={"url": COMPARISON_SHEET_URL})
+        return pd.DataFrame()
+
+
 @st.cache_data(ttl=3600)
 def load_historical_data() -> pd.DataFrame:
     data_dir = DATA_FILE.parent
@@ -101,12 +136,10 @@ def load_historical_data() -> pd.DataFrame:
     return ensure_sales_schema(pd.concat(frames, ignore_index=True, sort=False))
 
 
-
 def _dedupe_orders(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty or "order_item_key" not in df.columns:
         return df
     return df.drop_duplicates(subset=["order_item_key", "source"], keep="last")
-
 
 
 def load_hybrid_data(
@@ -140,14 +173,15 @@ def load_hybrid_data(
     return merged
 
 
-
 def get_data_summary() -> dict:
     df_hist = load_historical_data()
     df_live = load_live_2026_data()
     df_woo = load_woocommerce_live_data()
+    df_stream = load_live_stream_data()
     return {
         "historical": len(df_hist),
         "live_2026": len(df_live),
         "woocommerce_live": len(df_woo),
-        "total": len(df_hist) + len(df_live) + len(df_woo),
+        "live_stream": len(df_stream),
+        "total": len(df_hist) + len(df_live) + len(df_woo) + len(df_stream),
     }

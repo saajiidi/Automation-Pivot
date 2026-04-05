@@ -149,3 +149,112 @@ class WooCommerceService:
             file_path = year_folder / f"woo_orders_{datetime.now().strftime('%Y%m%d_%H%M%S')}.parquet"
             group.to_parquet(file_path, index=False)
             st.success(f"Saved {len(group)} orders for year {year} to {file_path}")
+
+    def fetch_products(self, page: int = 1, per_page: int = 100) -> List[Dict[str, Any]]:
+        """Fetch products from WooCommerce API."""
+        if not self.wcapi:
+            return []
+            
+        params = {
+            "page": page,
+            "per_page": per_page
+        }
+        response = self.wcapi.get("products", params=params)
+        if response.status_code == 200:
+            return response.json()
+        return []
+
+    def get_stock_report(self) -> pd.DataFrame:
+        """Fetch all products and extract stock counts using pagination headers."""
+        if not self.wcapi:
+            return pd.DataFrame()
+            
+        all_products = []
+        page = 1
+        per_page = 50
+        
+        while True:
+            response = self.wcapi.get("products", params={
+                "page": page,
+                "per_page": per_page,
+                "stock_status": "instock,outofstock,onbackorder"
+            })
+            
+            if response.status_code != 200:
+                break
+            
+            products = response.json()
+            if not products:
+                break
+            
+            for p in products:
+                all_products.append({
+                    "ID": p.get("id"),
+                    "Name": p.get("name"),
+                    "SKU": p.get("sku"),
+                    "Stock Status": p.get("stock_status"),
+                    "Stock Quantity": p.get("stock_quantity") or 0,
+                    "Price": float(p.get("price", 0)) if p.get("price") else 0,
+                    "Category": ", ".join([c.get("name") for c in p.get("categories", [])])
+                })
+            
+            total_pages = int(response.headers.get('x-wp-totalpages', 1))
+            if page >= total_pages:
+                break
+            page += 1
+            if page > 200: break # Safety cap
+            
+        return pd.DataFrame(all_products)
+
+    def query_stock_assistant(self, question: str, stock_df: pd.DataFrame) -> str:
+        """Send question + stock data context to AI and return answer using OpenAI."""
+        import openai
+        
+        # Determine API Key from environment or secrets
+        api_key = st.secrets.get("OPENAI_API_KEY")
+        if not api_key:
+            return "Error: OPENAI_API_KEY is missing in Streamlit secrets."
+        
+        openai.api_key = api_key
+        
+        # Create a summary of the stock data for context
+        stock_summary = f"""
+        Total Products: {len(stock_df)}
+        Out of Stock: {len(stock_df[stock_df['Stock Status'] == 'outofstock'])}
+        Low Stock (≤5 units): {len(stock_df[stock_df['Stock Quantity'] <= 5])}
+        Total Inventory Value: ${(stock_df['Stock Quantity'] * stock_df['Price']).sum():,.2f}
+        
+        Sample of products (first 10 rows):
+        {stock_df.head(10).to_string()}
+        
+        Full stock data columns: {', '.join(stock_df.columns)}
+        """
+        
+        system_prompt = """
+        You are a helpful WooCommerce stock assistant. You have access to real-time product stock data.
+        
+        Your job is to answer questions about:
+        - Product stock levels
+        - Low stock alerts
+        - Out of stock items
+        - Inventory value
+        - Product availability
+        
+        Always base your answers on the provided data. Be concise and helpful.
+        If the user asks about a specific product not in the sample, search the full dataset logically.
+        """
+        
+        try:
+            client = openai.OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Stock Data Summary:\n{stock_summary}\n\nUser Question: {question}"}
+                ],
+                temperature=0.3,
+                max_tokens=500
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"Error querying AI (OpenAI): {str(e)}"

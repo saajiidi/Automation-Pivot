@@ -110,7 +110,95 @@ consumer_secret = "cs_e3c0de58c7b1a8ff116215f5241c192f4b832e49"
                     status.update(label=f"⚠️ Error: {str(e)}", state="error")
                     st.error(f"Sync failed: {e}")
 
-    # 4. Data Management Summary
+    # 4. Stock Dashboard & AI Assistant
+    st.divider()
+    st.header("📦 Stock Dashboard & AI Assistant")
+    st.info("Monitor inventory levels and chat with your stock assistant for deep analysis.")
+    
+    if "woo_stock_df" not in st.session_state:
+        st.session_state.woo_stock_df = None
+    if "stock_messages" not in st.session_state:
+        st.session_state.stock_messages = [
+            {"role": "assistant", "content": "Hi! I'm your stock assistant. Ask me about your inventory, like 'Which items are low?' or 'What's my total stock value?'"}
+        ]
+
+    fetch_stock_btn = st.button("🔄 Sync Live Stock", use_container_width=True, type="secondary")
+    
+    if fetch_stock_btn:
+        with st.spinner("Fetching product data from WooCommerce..."):
+            stock_data = wc_service.get_stock_report()
+            if not stock_data.empty:
+                st.session_state.woo_stock_df = stock_data
+                st.success(f"✅ Successfully fetched {len(stock_data)} products!")
+            else:
+                st.warning("⚠️ No product data could be retrieved.")
+
+    if st.session_state.woo_stock_df is not None:
+        df_full = st.session_state.woo_stock_df
+        
+        # Filters
+        f1, f2 = st.columns([1, 2])
+        with f1:
+            status_filter = st.selectbox("Filter Status", ["All"] + sorted(df_full["Stock Status"].unique().tolist()), key="stock_status_filter")
+        with f2:
+            search_query = st.text_input("Find Product / SKU", "", key="stock_search_query")
+            
+        filtered_df = df_full.copy()
+        if status_filter != "All":
+            filtered_df = filtered_df[filtered_df["Stock Status"] == status_filter]
+        if search_query:
+            filtered_df = filtered_df[
+                filtered_df["Name"].str.contains(search_query, case=False) | 
+                filtered_df["SKU"].str.contains(search_query, case=False)
+            ]
+            
+        # Metrics Row
+        m1, m2, m3, m4 = st.columns(4)
+        total_p = len(filtered_df)
+        low_p = len(filtered_df[filtered_df["Stock Quantity"] <= 5])
+        out_p = len(filtered_df[filtered_df["Stock Status"] == "outofstock"])
+        total_v = (filtered_df["Stock Quantity"] * filtered_df["Price"]).sum()
+        
+        with m1: st.metric("Products", total_p)
+        with m2: st.metric("Low Stock (≤5)", low_p, delta=f"{low_p} items" if low_p > 0 else None, delta_color="inverse")
+        with m3: st.metric("Out of Stock", out_p, delta=f"{out_p} items" if out_p > 0 else None, delta_color="inverse")
+        with m4: st.metric("Value", f"TK {total_v:,.0f}")
+        
+        # Dual Column Layout
+        left, right = st.columns([1.5, 1])
+        
+        with left:
+            st.subheader("📋 Inventory Data")
+            st.dataframe(filtered_df, use_container_width=True, height=450, hide_index=True)
+            
+            # Export
+            csv_data = filtered_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Report (CSV)", data=csv_data, file_name=f"stock_report_{datetime.now().strftime('%Y%m%d')}.csv", mime="text/csv")
+            
+        with right:
+            st.subheader("🤖 Stock AI Assistant")
+            st.caption("Context: Currently Filtered Products")
+            
+            chat_container = st.container(height=400)
+            with chat_container:
+                for msg in st.session_state.stock_messages:
+                    with st.chat_message(msg["role"]):
+                        st.markdown(msg["content"])
+            
+            if prompt := st.chat_input("Ask about stock levels...", key="stock_assistant_input"):
+                st.session_state.stock_messages.append({"role": "user", "content": prompt})
+                with chat_container:
+                    with st.chat_message("user"):
+                        st.markdown(prompt)
+                    
+                    with st.chat_message("assistant"):
+                        with st.spinner("Analyzing..."):
+                            response = wc_service.query_stock_assistant(prompt, filtered_df)
+                            st.markdown(response)
+                            st.session_state.stock_messages.append({"role": "assistant", "content": response})
+                st.rerun()
+
+    # 5. Data Management Summary
     st.divider()
     st.subheader("📊 Storage Audit")
     

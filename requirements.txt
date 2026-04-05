@@ -25,3 +25,4 @@ google-auth-httplib2
 
 # AI Chatbot Integration
 google-generativeai
+openai
