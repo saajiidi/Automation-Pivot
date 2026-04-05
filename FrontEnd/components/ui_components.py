@@ -456,7 +456,7 @@ def render_sidebar_branding():
     st.markdown(
         f"""<div style="padding:10px 16px; border-bottom:1px solid rgba(128,128,128,0.1); margin-bottom:15px;">
             <div style="font-weight:700; font-size:1.1rem; line-height:1.2;">
-                Automation Pivot<br>
+                DEEN Commerce BI<br>
                 <span style="font-size:0.85rem; font-weight:400; color:#64748b;">v2.5.0</span>
             </div>
         </div>""",

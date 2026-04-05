@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import os
 from BackEnd.services.hybrid_data_loader import load_hybrid_data
 from BackEnd.engine.ai_query import query_app_data, generic_chat
 
@@ -46,7 +45,7 @@ def render_floating_ai_chat():
     with st.sidebar:
         st.divider()
         with st.popover("🤖 Ask AI Assistant", use_container_width=True):
-            st.subheader("Automation Pivot AI")
+            st.subheader("DEEN Commerce BI AI")
             st.caption("Ask questions about your sales, inventory, or customers.")
             
             # Chat history state
@@ -65,32 +64,25 @@ def render_floating_ai_chat():
             # Input
             if prompt := st.chat_input("Type your question...", key="ai_chat_input"):
                 st.session_state.ai_messages.append({"role": "user", "content": prompt})
-                
-                # Fetch API Key
-                api_key = os.environ.get("GEMINI_API_KEY", st.secrets.get("GEMINI_API_KEY", ""))
-                
-                if not api_key:
-                    with st.chat_message("assistant"):
-                        st.error("Gemini API Key is missing in secrets!")
-                else:
-                    with st.chat_message("assistant"):
-                        with st.spinner("AI is thinking..."):
-                            # For the floating chat, we won't auto-load giant DFs unless asked
-                            # But we can load recent hybrid data quickly
-                            try:
-                                df_sales = load_hybrid_data(start_date=(pd.Timestamp.now() - pd.Timedelta(days=30)).strftime("%Y-%m-%d"))
-                                answer, result_df = query_app_data(prompt, df_sales, api_key)
-                            except:
-                                answer = generic_chat(prompt, api_key, st.session_state.ai_messages)
-                                result_df = None
-                            
-                            st.markdown(answer)
-                            if result_df is not None and not result_df.empty:
-                                st.dataframe(result_df, use_container_width=True)
-                            
-                            st.session_state.ai_messages.append({
-                                "role": "assistant", 
-                                "content": answer,
-                                "df": result_df if result_df is not None and not result_df.empty else None
-                            })
+
+                with st.chat_message("assistant"):
+                    with st.spinner("AI is thinking..."):
+                        # For the floating chat, we won't auto-load giant DFs unless asked
+                        # But we can load recent hybrid data quickly
+                        try:
+                            df_sales = load_hybrid_data(start_date=(pd.Timestamp.now() - pd.Timedelta(days=30)).strftime("%Y-%m-%d"))
+                            answer, result_df = query_app_data(prompt, df_sales, "")
+                        except Exception:
+                            answer = generic_chat(prompt, "", st.session_state.ai_messages)
+                            result_df = None
+
+                        st.markdown(answer)
+                        if result_df is not None and not result_df.empty:
+                            st.dataframe(result_df, use_container_width=True)
+
+                        st.session_state.ai_messages.append({
+                            "role": "assistant",
+                            "content": answer,
+                            "df": result_df if result_df is not None and not result_df.empty else None
+                        })
                 st.rerun()

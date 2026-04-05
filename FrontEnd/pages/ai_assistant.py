@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import os
 from FrontEnd.components.ui_components import render_section_card
 from BackEnd.services.hybrid_data_loader import load_hybrid_data
 from BackEnd.engine.ai_query import query_app_data, generic_chat
@@ -9,28 +8,14 @@ from BackEnd.engine.ai_query import query_app_data, generic_chat
 def render_ai_assistant_tab():
     """Renders the AI Assistant tab for interacting with the database."""
     render_section_card(
-        "🤖 Automation Pivot AI",
+        "🤖 DEEN Commerce BI AI",
         "Ask natural language questions about your database and application data",
     )
 
-    # Ensure API Key is available
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    try:
-        if not api_key:
-            api_key = st.secrets.get("GEMINI_API_KEY", "")
-    except FileNotFoundError:
-        pass
-
-    if not api_key:
-        st.warning(
-            "⚠️ **Gemini API Key Missing!** Please configure `GEMINI_API_KEY` in your `.streamlit/secrets.toml` file to use this feature."
-        )
-        with st.expander("How to configure"):
-            st.code("""
-# .streamlit/secrets.toml
-GEMINI_API_KEY="your-api-key-here"
-            """)
-        return
+    st.info(
+        "AI features are currently disabled because the deprecated Gemini integration "
+        "was removed from this app."
+    )
 
     # Chat history state
     if "messages" not in st.session_state:
@@ -40,7 +25,7 @@ GEMINI_API_KEY="your-api-key-here"
         st.session_state.messages.append(
             {
                 "role": "assistant",
-                "content": "👋 Hi! I'm Automation Pivot AI. How can I help you analyze your data today?",
+                "content": "👋 Hi! I'm DEEN Commerce BI AI. How can I help you analyze your data today?",
             }
         )
 
@@ -85,10 +70,10 @@ GEMINI_API_KEY="your-api-key-here"
                 # Decide if we need to query data or chat normally
                 if use_sales_data and df_sales is not None and not df_sales.empty:
                     # Query data
-                    answer, result_df = query_app_data(prompt, df_sales, api_key)
+                    answer, result_df = query_app_data(prompt, df_sales, "")
                 else:
                     # Generic chat
-                    answer = generic_chat(prompt, api_key, st.session_state.messages)
+                    answer = generic_chat(prompt, "", st.session_state.messages)
                     result_df = None
 
                 # Display output

@@ -226,13 +226,13 @@ def render_dashboard_tab():
     """, unsafe_allow_html=True)
 
     render_bi_hero(
-        "Commerce Command Center",
-        "A cleaner BI-style operating view for revenue, demand, customer health, and geographic performance. The dashboard is now optimized for WooCommerce-only analysis with less visual noise and clearer executive signals.",
+        "DEEN Commerce BI",
+        "A focused BI operating view for revenue, demand, customer health, and geographic performance. The dashboard now opens on the latest 30 days of WooCommerce data so the default experience stays fast and practical.",
         chips=[
+            "Last 30 days default",
             "WooCommerce-only",
-            "Customer intelligence",
+            "Historical on demand",
             "Inventory visibility",
-            "Modern BI layout",
         ],
     )
 
@@ -243,12 +243,32 @@ def render_dashboard_tab():
     include_gsheet = False
     include_woo = True
 
-    # Date range is now fixed for rolling comparisons (90 days / 3 months)
+    historical_requested = st.session_state.get("dashboard_historical_requested", False)
+
+    # Default to the latest 30 days so the dashboard stays lightweight.
     end_date = date.today()
-    start_date = end_date - timedelta(days=90)
-    
+    start_date = end_date - timedelta(days=30)
+
     st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
-    load_clicked = st.button("Sync WooCommerce Data", use_container_width=True, type="primary", help="Force a refresh of WooCommerce orders, customer history, and inventory cache.")
+    action_col_1, action_col_2 = st.columns(2)
+    with action_col_1:
+        load_clicked = st.button(
+            "Sync Last 30 Days",
+            use_container_width=True,
+            type="primary",
+            help="Refresh the default 30-day WooCommerce sales window and inventory cache.",
+        )
+    with action_col_2:
+        load_history_clicked = st.button(
+            "Load Historical Data",
+            use_container_width=True,
+            help="Fetch lifetime WooCommerce order history only when you need long-term retention context.",
+        )
+    if load_history_clicked:
+        historical_requested = True
+        st.session_state.dashboard_historical_requested = True
+
+    st.caption("Default dashboard metrics and charts are based on the latest 30 days of WooCommerce activity.")
 
     start_date_str = start_date.strftime("%Y-%m-%d")
     end_date_str = end_date.strftime("%Y-%m-%d")
@@ -256,13 +276,18 @@ def render_dashboard_tab():
 
     orders_status = get_woocommerce_orders_cache_status(start_date_str, end_date_str)
     stock_status = get_woocommerce_stock_cache_status()
-    full_history_status = get_woocommerce_full_history_status(end_date=end_date_str)
+    full_history_status = get_woocommerce_full_history_status(end_date=end_date_str) if historical_requested else {}
     if include_woo:
-        full_history_started = start_full_history_background_refresh(end_date=end_date_str, force=load_clicked)
         orders_started = start_orders_background_refresh(start_date_str, end_date_str, force=load_clicked)
         stock_started = start_stock_background_refresh(force=load_clicked)
-        if full_history_started:
-            full_history_status = get_woocommerce_full_history_status(end_date=end_date_str)
+        full_history_started = False
+        if historical_requested:
+            full_history_started = start_full_history_background_refresh(
+                end_date=end_date_str,
+                force=load_history_clicked,
+            )
+            if full_history_started or full_history_status:
+                full_history_status = get_woocommerce_full_history_status(end_date=end_date_str)
         if orders_started:
             orders_status = get_woocommerce_orders_cache_status(start_date_str, end_date_str)
         if stock_started:
@@ -272,6 +297,7 @@ def render_dashboard_tab():
         "start_date": start_date_str,
         "end_date": end_date_str,
         "include_woo": include_woo,
+        "historical_requested": historical_requested,
     }
     cache_signature = "|".join(
         [
@@ -279,8 +305,8 @@ def render_dashboard_tab():
             str(orders_status.get("is_running", False)),
             str(stock_status.get("last_refresh", "")),
             str(stock_status.get("is_running", False)),
-            str(full_history_status.get("last_full_sync", "")),
-            str(full_history_status.get("is_running", False)),
+            str(full_history_status.get("last_full_sync", "") if historical_requested else ""),
+            str(full_history_status.get("is_running", False) if historical_requested else False),
         ]
     )
     should_load = (
@@ -305,14 +331,16 @@ def render_dashboard_tab():
                 st.warning("No WooCommerce sales data was found for the selected date range.")
                 return
 
-            try:
-                full_woo_history = _prune_dataframe(
-                    load_full_woocommerce_history(end_date=end_date_str),
-                    FULL_HISTORY_COLUMNS,
-                )
-            except MemoryError as exc:
-                log_error(exc, context="Dashboard Load", details={"mode": "full_history_disabled"})
-                full_woo_history = pd.DataFrame()
+            full_woo_history = pd.DataFrame()
+            if historical_requested and full_history_status.get("is_complete"):
+                try:
+                    full_woo_history = _prune_dataframe(
+                        load_full_woocommerce_history(end_date=end_date_str),
+                        FULL_HISTORY_COLUMNS,
+                    )
+                except MemoryError as exc:
+                    log_error(exc, context="Dashboard Load", details={"mode": "full_history_disabled"})
+                    full_woo_history = pd.DataFrame()
 
             try:
                 df_customers = _build_dashboard_customer_insights(df_sales, full_woo_history)
@@ -338,6 +366,18 @@ def render_dashboard_tab():
                 "total": len(df_sales),
             }
 
+            if not historical_requested:
+                full_history_hint = "Historical customer data is off by default. Click 'Load Historical Data' when you need lifetime retention context."
+            elif full_history_status.get("is_complete"):
+                full_history_hint = full_history_status.get("status_message", "Lifetime WooCommerce history is loaded.")
+            elif full_history_status.get("is_running"):
+                full_history_hint = "Historical WooCommerce sync is running in the background. Customer lifetime metrics will become richer after it finishes."
+            else:
+                full_history_hint = full_history_status.get(
+                    "status_message",
+                    "Historical sync has been requested but is not complete yet.",
+                )
+
             st.session_state.dashboard_data = {
                 "sales": df_sales,
                 "customers": df_customers,
@@ -346,7 +386,9 @@ def render_dashboard_tab():
                 "stock": stock_df,
                 "loaded_from_cache_hint": orders_status.get("status_message", ""),
                 "stock_cache_hint": stock_status.get("status_message", ""),
-                "full_history_hint": full_history_status.get("status_message", ""),
+                "full_history_hint": full_history_hint,
+                "historical_requested": historical_requested,
+                "historical_ready": bool(full_history_status.get("is_complete")),
             }
             st.session_state.dashboard_request_signature = request_signature
             st.session_state.dashboard_cache_signature = cache_signature
@@ -383,7 +425,13 @@ def render_dashboard_tab():
                     "stock": pd.DataFrame(),
                     "loaded_from_cache_hint": orders_status.get("status_message", ""),
                     "stock_cache_hint": "Inventory was skipped in low-memory safe mode.",
-                    "full_history_hint": "Customer lifetime history was skipped in low-memory safe mode.",
+                    "full_history_hint": (
+                        "Customer lifetime history was skipped in low-memory safe mode."
+                        if historical_requested
+                        else "Historical customer data is off by default in the lightweight dashboard."
+                    ),
+                    "historical_requested": historical_requested,
+                    "historical_ready": False,
                 }
                 st.session_state.dashboard_request_signature = request_signature
                 st.session_state.dashboard_cache_signature = cache_signature
@@ -393,7 +441,7 @@ def render_dashboard_tab():
                 return
 
     if "dashboard_data" not in st.session_state:
-        st.info("Click 'Sync WooCommerce Data' to fetch the latest insights from WooCommerce.")
+        st.info("Click 'Sync Last 30 Days' to fetch the latest WooCommerce insights.")
         return
 
     data = st.session_state.dashboard_data
@@ -403,6 +451,8 @@ def render_dashboard_tab():
     summary = data.get("summary", {})
     ml_bundle = data.get("ml", {})
     stock_df = data.get("stock", pd.DataFrame())
+    historical_ready = data.get("historical_ready", False)
+    historical_requested = data.get("historical_requested", historical_requested)
     st.caption(data.get("loaded_from_cache_hint", ""))
     st.caption(data.get("stock_cache_hint", ""))
     st.caption(data.get("full_history_hint", ""))
@@ -434,7 +484,7 @@ def render_dashboard_tab():
             render_data_audit(df_sales, df_customers, start_date, end_date)
     with tabs[1]:
         st.caption("Customer growth, repeat behavior, and retention signals in one focused view.")
-        render_customer_behavior(df_woo_only, df_customers)
+        render_customer_behavior(df_woo_only, df_customers, historical_ready=historical_ready)
     with tabs[2]:
         st.caption("Top products, stock position, and demand coverage without extra noise.")
         render_product_performance(df_woo_only)
@@ -1323,9 +1373,16 @@ def render_product_performance(df: pd.DataFrame):
     st.dataframe(top_products.rename(columns={"item_name": "Product"}), use_container_width=True, hide_index=True)
 
 
-def render_customer_behavior(df_sales: pd.DataFrame, df_customers: pd.DataFrame):
+def render_customer_behavior(
+    df_sales: pd.DataFrame,
+    df_customers: pd.DataFrame,
+    historical_ready: bool = False,
+):
     st.subheader("Customer Behavior")
-    st.caption("This view uses WooCommerce customer and order history only for retention accuracy.")
+    if historical_ready:
+        st.caption("This view includes lifetime WooCommerce history for stronger retention and repeat-customer accuracy.")
+    else:
+        st.caption("This view is using the latest 30 days by default. Load historical WooCommerce data on demand for lifetime retention accuracy.")
     _render_section_date_context(df_sales, "Loaded customer behavior activity")
     if df_customers is None or df_customers.empty:
         st.info("Customer insights are not available yet for the selected period.")

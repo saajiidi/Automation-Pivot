@@ -1,4 +1,4 @@
-"""Automation Pivot - Frontend Module
+"""DEEN Commerce BI - Frontend Module
 
 This module contains all UI components, pages, and utilities for the Streamlit frontend.
 
@@ -13,4 +13,4 @@ Usage:
 """
 
 __version__ = "2.5.0"
-__author__ = "Automation Pivot Team"
+__author__ = "DEEN Commerce BI Team"

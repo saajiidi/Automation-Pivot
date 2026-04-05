@@ -1,6 +1,6 @@
 from datetime import date
 
-APP_TITLE = "Automation Pivot"
+APP_TITLE = "DEEN Commerce BI"
 APP_VERSION = "v2.5.0"
 APP_DATA_START_DATE = date(2022, 8, 1)
 

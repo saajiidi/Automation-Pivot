@@ -1,4 +1,4 @@
-"""Automation Pivot - Backend Module
+"""DEEN Commerce BI - Backend Module
 
 This module contains all data processing, services, and business logic.
 
