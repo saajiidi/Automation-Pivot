@@ -2,13 +2,11 @@ APP_TITLE = "Automation Pivot"
 APP_VERSION = "v2.5.0"
 
 PRIMARY_NAV = [
-    "📊 Dashboard",
-    "📡 Live Stream",
-    "📦 Orders",
-    "🎯 Customer Insights",
-    "📈 Catwise Analytics",
-    "🛍️ WooCommerce",
-    "🩺 System Health",
+    "Dashboard",
+    "Stream Monitor",
+    "Customer Intelligence",
+    "Commerce Hub",
+    "System Health",
 ]
 
 MORE_TOOLS = [

@@ -30,14 +30,12 @@ st.set_page_config(
 
 def run_app():
     # Lazy imports keep bootstrap resilient on cloud when a module has runtime incompatibilities.
-    from FrontEnd.components import render_bike_animation, render_floating_ai_chat
     from FrontEnd.pages import render_customer_insight_tab
     from FrontEnd.pages import render_dashboard_tab
-    from FrontEnd.pages.catwise import render_catwise_analytics_tab
     from FrontEnd.pages.system_health import render_system_health_tab
     from FrontEnd.utils.error_handler import get_logs, log_error
     from FrontEnd.utils.state import init_state, save_state
-    from FrontEnd.pages import render_live_tab, render_manual_tab, render_woocommerce_tab
+    from FrontEnd.pages import render_live_tab, render_woocommerce_tab
     from FrontEnd.components import (
         inject_base_styles,
         render_header,
@@ -54,11 +52,6 @@ def run_app():
     with st.sidebar:
         render_sidebar_branding()
         st.subheader("Workspace")
-
-        st.session_state.show_animation = st.toggle(
-            "Show motion effects",
-            value=st.session_state.get("show_animation", False),
-        )
 
         if st.button("Save session state", use_container_width=True):
             save_state()
@@ -111,8 +104,6 @@ def run_app():
                     st.rerun()
 
     render_header()
-    if st.session_state.get("show_animation"):
-        render_bike_animation()
 
     nav_tabs = st.tabs(PRIMARY_NAV)
 
@@ -123,22 +114,15 @@ def run_app():
         render_live_tab()
 
     with nav_tabs[2]:
-        render_manual_tab()
-
-    with nav_tabs[3]:
         render_customer_insight_tab()
 
-    with nav_tabs[4]:
-        render_catwise_analytics_tab()
-
-    with nav_tabs[5]:
+    with nav_tabs[3]:
         render_woocommerce_tab()
 
-    with nav_tabs[6]:
+    with nav_tabs[4]:
         render_system_health_tab()
 
     render_footer()
-    render_floating_ai_chat()
 
 
 try:

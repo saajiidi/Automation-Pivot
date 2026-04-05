@@ -3,6 +3,7 @@ from woocommerce import API
 import streamlit as st
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+from urllib.parse import urlparse
 
 
 def get_woocommerce_credentials() -> dict[str, str]:
@@ -22,6 +23,29 @@ def get_woocommerce_credentials() -> dict[str, str]:
     return credentials
 
 
+def get_woocommerce_store_label() -> str:
+    credentials = get_woocommerce_credentials()
+    if not credentials:
+        return "Not connected"
+    try:
+        host = urlparse(credentials["store_url"]).netloc or credentials["store_url"]
+        return host.replace("www.", "")
+    except Exception:
+        return "Connected store"
+
+
+def _sanitize_api_error(error_text: str) -> str:
+    if not error_text:
+        return "Unknown API error"
+    safe_text = str(error_text)
+    credentials = get_woocommerce_credentials()
+    for key_name in ("consumer_key", "consumer_secret"):
+        value = credentials.get(key_name)
+        if value:
+            safe_text = safe_text.replace(value, "[redacted]")
+    return safe_text
+
+
 class WooCommerceService:
     def __init__(self):
         """Initialize connection using Streamlit secrets."""
@@ -38,7 +62,7 @@ class WooCommerceService:
                 timeout=120
             )
         except Exception as e:
-            st.error(f"WooCommerce API Initialization Failed: {e}")
+            st.error("WooCommerce API initialization failed. Please verify the store URL and API keys.")
             self.wcapi = None
 
     def fetch_orders(self, page: int = 1, per_page: int = 100, status: str = "any", 
@@ -61,7 +85,7 @@ class WooCommerceService:
         if response.status_code == 200:
             return response.json()
         else:
-            st.error(f"Failed to fetch orders: {response.status_code} - {response.text}")
+            st.error(f"Failed to fetch orders: {response.status_code} - {_sanitize_api_error(response.text)}")
             return []
 
     def fetch_all_historical_orders(self, after: Optional[str] = None, before: Optional[str] = None, status: str = "any") -> pd.DataFrame:
@@ -187,7 +211,7 @@ class WooCommerceService:
         return []
 
     def get_stock_report(self) -> pd.DataFrame:
-        """Fetch all products and extract stock counts using pagination headers."""
+        """Fetch all published products and extract stock counts using pagination headers."""
         if not self.wcapi:
             return pd.DataFrame()
             
@@ -199,10 +223,11 @@ class WooCommerceService:
             response = self.wcapi.get("products", params={
                 "page": page,
                 "per_page": per_page,
-                "stock_status": "instock,outofstock,onbackorder"
+                "status": "publish",
             })
             
             if response.status_code != 200:
+                st.error(f"Failed to fetch products: {response.status_code} - {_sanitize_api_error(response.text)}")
                 break
             
             products = response.json()
@@ -210,14 +235,18 @@ class WooCommerceService:
                 break
             
             for p in products:
+                stock_quantity = p.get("stock_quantity")
+                stock_status = p.get("stock_status") or ("instock" if stock_quantity not in (None, "", 0) else "unknown")
                 all_products.append({
                     "ID": p.get("id"),
                     "Name": p.get("name"),
                     "SKU": p.get("sku"),
-                    "Stock Status": p.get("stock_status"),
-                    "Stock Quantity": p.get("stock_quantity") or 0,
+                    "Stock Status": stock_status,
+                    "Stock Quantity": stock_quantity or 0,
                     "Price": float(p.get("price", 0)) if p.get("price") else 0,
-                    "Category": ", ".join([c.get("name") for c in p.get("categories", [])])
+                    "Category": ", ".join([c.get("name") for c in p.get("categories", [])]),
+                    "Manage Stock": bool(p.get("manage_stock")),
+                    "Product Type": p.get("type", ""),
                 })
             
             total_pages = int(response.headers.get('x-wp-totalpages', 1))
