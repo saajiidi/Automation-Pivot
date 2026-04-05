@@ -119,6 +119,7 @@ def render_dashboard_tab():
     stock_df = data.get("stock", pd.DataFrame())
 
     tabs = st.tabs([
+        "Business Intelligence",
         "Executive Summary",
         "Data Audit",
         "Streaming Comparison",
@@ -130,23 +131,209 @@ def render_dashboard_tab():
         "Forecast & Alerts",
     ])
     with tabs[0]:
-        render_executive_summary(df_sales, df_customers, summary)
+        render_business_intelligence(df_sales, df_customers)
     with tabs[1]:
-        render_data_audit(df_sales, df_customers, start_date, end_date)
+        render_executive_summary(df_sales, df_customers, summary)
     with tabs[2]:
-        render_live_stream_comparison()
+        render_data_audit(df_sales, df_customers, start_date, end_date)
     with tabs[3]:
-        render_sales_trends(df_sales)
+        render_live_stream_comparison()
     with tabs[4]:
-        render_product_performance(df_woo_only) # Restricted to WooCommerce
+        render_sales_trends(df_sales)
     with tabs[5]:
-        render_customer_behavior(df_woo_only, df_customers) # Restricted to WooCommerce
+        render_product_performance(df_woo_only) # Restricted to WooCommerce
     with tabs[6]:
-        render_geographic_insights(df_sales)
+        render_customer_behavior(df_woo_only, df_customers) # Restricted to WooCommerce
     with tabs[7]:
-        render_inventory_health(stock_df, ml_bundle.get("forecast", pd.DataFrame()))
+        render_geographic_insights(df_sales)
     with tabs[8]:
+        render_inventory_health(stock_df, ml_bundle.get("forecast", pd.DataFrame()))
+    with tabs[9]:
         render_forecast_and_alerts(ml_bundle)
+
+
+def render_business_intelligence(df_sales: pd.DataFrame, df_customers: pd.DataFrame):
+    st.subheader("Business Intelligence")
+    st.caption("Executive comparison and period-based sales performance.")
+
+    render_today_vs_last_day_sales_chart()
+    st.divider()
+
+    view_mode = st.selectbox(
+        "Period View",
+        ["Quarter", "Month", "Week", "Year"],
+        index=0,
+        key="bi_period_view",
+        help="Change the chart grain for revenue, orders, unique customers, and new customers.",
+    )
+
+    metrics_df = build_period_business_metrics(df_sales, df_customers, view_mode)
+    if metrics_df.empty:
+        st.info("No period metrics are available for the current selection.")
+        return
+
+    latest_row = metrics_df.iloc[-1]
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("Sales Revenue", f"TK {latest_row['revenue']:,.0f}")
+        render_kpi_note(f"Latest {view_mode.lower()} bucket")
+    with m2:
+        st.metric("Order Count", f"{int(latest_row['orders']):,}")
+        render_kpi_note(f"Distinct orders in latest {view_mode.lower()}")
+    with m3:
+        st.metric("Unique Customers", f"{int(latest_row['unique_customers']):,}")
+        render_kpi_note(f"Distinct customers in latest {view_mode.lower()}")
+    with m4:
+        st.metric("New Customers", f"{int(latest_row['new_customers']):,}")
+        render_kpi_note(f"First-time customers in latest {view_mode.lower()}")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        fig_revenue = px.bar(
+            metrics_df,
+            x="period_label",
+            y="revenue",
+            color="revenue",
+            title=f"{view_mode} Sales Revenue",
+            color_continuous_scale="Tealgrn",
+            labels={"period_label": view_mode, "revenue": "Revenue"},
+        )
+        fig_revenue.update_layout(height=360, xaxis_title=view_mode, yaxis_title="Revenue")
+        st.plotly_chart(fig_revenue, use_container_width=True)
+    with c2:
+        orders_customers = metrics_df.melt(
+            id_vars=["period_label"],
+            value_vars=["orders", "unique_customers", "new_customers"],
+            var_name="metric",
+            value_name="value",
+        )
+        fig_people = px.line(
+            orders_customers,
+            x="period_label",
+            y="value",
+            color="metric",
+            markers=True,
+            title=f"{view_mode} Orders and Customers",
+            labels={"period_label": view_mode, "value": "Count", "metric": "Metric"},
+        )
+        fig_people.update_layout(height=360, xaxis_title=view_mode, yaxis_title="Count")
+        st.plotly_chart(fig_people, use_container_width=True)
+
+    st.markdown("#### Period Summary")
+    st.dataframe(
+        metrics_df.rename(
+            columns={
+                "period_label": view_mode,
+                "revenue": "Sales Revenue",
+                "orders": "Order Count",
+                "unique_customers": "Unique Customers",
+                "new_customers": "New Customers",
+            }
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
+def render_today_vs_last_day_sales_chart():
+    st.markdown("#### Today vs Last Day Sales Comparison")
+    stream_df = load_live_stream_data()
+    compare_df = load_comparison_data()
+    if stream_df.empty and compare_df.empty:
+        st.info("No live comparison data is available right now.")
+        return
+
+    comparison = pd.DataFrame(
+        {
+            "Period": ["Today", "Last Day"],
+            "Revenue": [
+                float(stream_df["order_total"].sum()) if not stream_df.empty else 0.0,
+                float(compare_df["order_total"].sum()) if not compare_df.empty else 0.0,
+            ],
+            "Orders": [
+                int(stream_df["order_id"].nunique()) if not stream_df.empty else 0,
+                int(compare_df["order_id"].nunique()) if not compare_df.empty else 0,
+            ],
+            "Units": [
+                float(stream_df["qty"].sum()) if not stream_df.empty else 0.0,
+                float(compare_df["qty"].sum()) if not compare_df.empty else 0.0,
+            ],
+        }
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        fig_revenue = px.bar(
+            comparison,
+            x="Period",
+            y="Revenue",
+            color="Period",
+            title="Today vs Last Day Revenue",
+            text_auto=".2s",
+        )
+        fig_revenue.update_layout(height=320, showlegend=False)
+        st.plotly_chart(fig_revenue, use_container_width=True)
+    with c2:
+        comp_melt = comparison.melt(
+            id_vars=["Period"],
+            value_vars=["Orders", "Units"],
+            var_name="Metric",
+            value_name="Value",
+        )
+        fig_volume = px.bar(
+            comp_melt,
+            x="Metric",
+            y="Value",
+            color="Period",
+            barmode="group",
+            title="Today vs Last Day Orders and Units",
+        )
+        fig_volume.update_layout(height=320)
+        st.plotly_chart(fig_volume, use_container_width=True)
+
+
+def build_period_business_metrics(
+    df_sales: pd.DataFrame,
+    df_customers: pd.DataFrame,
+    view_mode: str,
+) -> pd.DataFrame:
+    sales = ensure_sales_schema(df_sales)
+    sales = sales[sales["order_date"].notna()].copy()
+    if sales.empty:
+        return pd.DataFrame()
+
+    freq_map = {
+        "Quarter": "Q",
+        "Month": "M",
+        "Week": "W",
+        "Year": "Y",
+    }
+    period_series = sales["order_date"].dt.to_period(freq_map.get(view_mode, "Q"))
+    sales["period"] = period_series
+    sales["period_label"] = period_series.astype(str)
+
+    metrics = (
+        sales.groupby(["period", "period_label"], as_index=False)
+        .agg(
+            revenue=("order_total", "sum"),
+            orders=("order_id", lambda s: s.replace("", pd.NA).dropna().nunique()),
+            unique_customers=("customer_key", lambda s: s.replace("", pd.NA).dropna().nunique()),
+        )
+        .sort_values("period")
+        .reset_index(drop=True)
+    )
+
+    if isinstance(df_customers, pd.DataFrame) and not df_customers.empty and "first_order" in df_customers.columns:
+        customer_df = df_customers.copy()
+        customer_df["first_order"] = pd.to_datetime(customer_df["first_order"], errors="coerce")
+        customer_df = customer_df[customer_df["first_order"].notna()].copy()
+        if not customer_df.empty:
+            customer_df["period"] = customer_df["first_order"].dt.to_period(freq_map.get(view_mode, "Q"))
+            new_customer_counts = customer_df.groupby("period").size().reset_index(name="new_customers")
+            metrics = metrics.merge(new_customer_counts, on="period", how="left")
+
+    metrics["new_customers"] = pd.to_numeric(metrics.get("new_customers", 0), errors="coerce").fillna(0).astype(int)
+    return metrics[["period", "period_label", "revenue", "orders", "unique_customers", "new_customers"]]
 
 
 def render_live_stream_comparison():

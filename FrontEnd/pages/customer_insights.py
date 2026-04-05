@@ -79,13 +79,15 @@ def render_customer_insight_tab():
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
-        st.metric("Customers", f"{len(df):,}")
+        st.metric("Total Customers", f"{len(df):,}")
     with m2:
         st.metric("Revenue", f"TK {df['total_revenue'].sum():,.0f}")
     with m3:
         st.metric("Avg Orders", f"{df['total_orders'].mean():.1f}")
     with m4:
         st.metric("Avg AOV", f"TK {df['avg_order_value'].mean():,.0f}")
+
+    st.caption(f"Total Customers shows the distinct customer count in the current date range and active filters: {len(df):,}.")
 
     with st.expander("RFM Segments", expanded=True):
         segments = get_customer_segments(df)
