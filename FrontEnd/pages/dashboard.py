@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import plotly.express as px
@@ -181,26 +181,12 @@ def render_dashboard_tab():
     include_gsheet = live_source in {"Merged (Woo + Sheets)", "Historical + Sheets Only"}
     include_woo = live_source in {"Merged (Woo + Sheets)", "WooCommerce API Only"}
 
-    col1, col2, col3 = st.columns([2, 2, 1])
-    with col1:
-        start_date = st.date_input(
-            "From",
-            value=APP_DATA_START_DATE,
-            min_value=APP_DATA_START_DATE,
-            max_value=date.today(),
-            key="dashboard_start_date",
-        )
-    with col2:
-        end_date = st.date_input(
-            "To",
-            value=date.today(),
-            min_value=APP_DATA_START_DATE,
-            max_value=date.today(),
-            key="dashboard_end_date",
-        )
-    with col3:
-        st.markdown("<div style='height: 1.75rem;'></div>", unsafe_allow_html=True)
-        load_clicked = st.button("Refresh Data", use_container_width=True, type="primary")
+    # Date range is now fixed for rolling comparisons
+    end_date = date.today()
+    start_date = end_date - timedelta(days=120)
+    
+    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+    load_clicked = st.button("Sync Live Data", use_container_width=True, type="primary", help="Force a refresh of WooCommerce and Google Sheet data.")
 
     start_date_str = start_date.strftime("%Y-%m-%d")
     end_date_str = end_date.strftime("%Y-%m-%d")
@@ -361,8 +347,7 @@ def render_dashboard_tab():
 
 def render_business_intelligence(df_sales: pd.DataFrame, df_customers: pd.DataFrame):
     st.subheader("Business Intelligence")
-    st.caption("Executive comparison and period-based sales performance.")
-    _render_section_date_context(df_sales, "Loaded BI sales activity")
+    st.caption("Executive comparison and rolling period-based sales performance.")
 
     render_today_vs_last_day_sales_chart()
     st.divider()
@@ -373,80 +358,7 @@ def render_business_intelligence(df_sales: pd.DataFrame, df_customers: pd.DataFr
     render_month_over_month_summary(df_sales, df_customers)
     st.divider()
 
-    view_mode = st.selectbox(
-        "Period View",
-        ["Quarter", "Month", "Week", "Year"],
-        index=2,
-        key="bi_period_view",
-        help="Change the chart grain for revenue, orders, unique customers, and new customers.",
-    )
-
-    metrics_df = build_period_business_metrics(df_sales, df_customers, view_mode)
-    if metrics_df.empty:
-        st.info("No period metrics are available for the current selection.")
-        return
-
-    latest_row = metrics_df.iloc[-1]
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.metric("Sales Revenue", f"TK {latest_row['revenue']:,.0f}")
-        render_kpi_note(f"Latest {view_mode.lower()} bucket")
-    with m2:
-        st.metric("Order Count", f"{int(latest_row['orders']):,}")
-        render_kpi_note(f"Distinct orders in latest {view_mode.lower()}")
-    with m3:
-        st.metric("Unique Customers", f"{int(latest_row['unique_customers']):,}")
-        render_kpi_note(f"Distinct customers in latest {view_mode.lower()}")
-    with m4:
-        st.metric("New Customers", f"{int(latest_row['new_customers']):,}")
-        render_kpi_note(f"First-time customers in latest {view_mode.lower()}")
-
-    c1, c2 = st.columns(2)
-    with c1:
-        fig_revenue = px.bar(
-            metrics_df,
-            x="period_label",
-            y="revenue",
-            color="revenue",
-            title=f"{view_mode} Sales Revenue",
-            color_continuous_scale="Tealgrn",
-            labels={"period_label": view_mode, "revenue": "Revenue"},
-        )
-        fig_revenue.update_layout(height=360, xaxis_title=view_mode, yaxis_title="Revenue")
-        st.plotly_chart(fig_revenue, use_container_width=True)
-    with c2:
-        orders_customers = metrics_df.melt(
-            id_vars=["period_label"],
-            value_vars=["orders", "unique_customers", "new_customers"],
-            var_name="metric",
-            value_name="value",
-        )
-        fig_people = px.line(
-            orders_customers,
-            x="period_label",
-            y="value",
-            color="metric",
-            markers=True,
-            title=f"{view_mode} Orders and Customers",
-            labels={"period_label": view_mode, "value": "Count", "metric": "Metric"},
-        )
-        fig_people.update_layout(height=360, xaxis_title=view_mode, yaxis_title="Count")
-        st.plotly_chart(fig_people, use_container_width=True)
-
-    st.markdown("#### Period Summary")
-    st.dataframe(
-        metrics_df.rename(
-            columns={
-                "period_label": view_mode,
-                "revenue": "Sales Revenue",
-                "orders": "Order Count",
-                "unique_customers": "Unique Customers",
-                "new_customers": "New Customers",
-            }
-        ),
-        use_container_width=True,
-        hide_index=True,
-    )
+    st.divider()
 
 
 def render_today_vs_last_day_sales_chart():
