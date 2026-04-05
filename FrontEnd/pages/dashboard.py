@@ -195,6 +195,14 @@ def _render_section_date_context(df: pd.DataFrame, label: str):
     )
 
 
+def _is_newer_timestamp(current_value, snapshot_value) -> bool:
+    current_ts = pd.to_datetime(current_value, errors="coerce")
+    snapshot_ts = pd.to_datetime(snapshot_value, errors="coerce")
+    if pd.isna(current_ts) or pd.isna(snapshot_ts):
+        return False
+    return current_ts > snapshot_ts
+
+
 def render_dashboard_tab():
     # Inject Responsive CSS
     st.markdown("""
@@ -384,6 +392,9 @@ def render_dashboard_tab():
                 "summary": summary,
                 "ml": ml_bundle,
                 "stock": stock_df,
+                "orders_cache_last_refresh": orders_status.get("last_refresh"),
+                "stock_cache_last_refresh": stock_status.get("last_refresh"),
+                "full_history_last_refresh": full_history_status.get("last_full_sync"),
                 "loaded_from_cache_hint": orders_status.get("status_message", ""),
                 "stock_cache_hint": stock_status.get("status_message", ""),
                 "full_history_hint": full_history_hint,
@@ -423,6 +434,9 @@ def render_dashboard_tab():
                     },
                     "ml": {"forecast": pd.DataFrame(), "customer_risk": pd.DataFrame(), "anomalies": pd.DataFrame()},
                     "stock": pd.DataFrame(),
+                    "orders_cache_last_refresh": orders_status.get("last_refresh"),
+                    "stock_cache_last_refresh": stock_status.get("last_refresh"),
+                    "full_history_last_refresh": full_history_status.get("last_full_sync"),
                     "loaded_from_cache_hint": orders_status.get("status_message", ""),
                     "stock_cache_hint": "Inventory was skipped in low-memory safe mode.",
                     "full_history_hint": (
@@ -468,6 +482,24 @@ def render_dashboard_tab():
         st.info("Background sync is running. The dashboard is using local cached data now and will pick up fresher WooCommerce data on the next rerun.")
     elif include_woo and df_woo_only.empty and not orders_status.get("cache_exists"):
         st.info("WooCommerce cache is being prepared. Core BI views will fill in as soon as the background sync finishes.")
+
+    stale_reasons = []
+    if _is_newer_timestamp(orders_status.get("last_refresh"), data.get("orders_cache_last_refresh")):
+        stale_reasons.append("WooCommerce orders cache")
+    if _is_newer_timestamp(stock_status.get("last_refresh"), data.get("stock_cache_last_refresh")):
+        stale_reasons.append("inventory snapshot")
+    if historical_requested and _is_newer_timestamp(
+        full_history_status.get("last_full_sync"),
+        data.get("full_history_last_refresh"),
+    ):
+        stale_reasons.append("historical customer cache")
+
+    if stale_reasons:
+        stale_labels = ", ".join(stale_reasons)
+        st.warning(
+            f"The dashboard is showing an older in-memory snapshot. Newer local data is available for: {stale_labels}. "
+            "Rerun the page or click the sync button to refresh what you see."
+        )
 
     tabs = st.tabs([
         "Overview",
