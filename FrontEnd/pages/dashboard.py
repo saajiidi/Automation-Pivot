@@ -285,7 +285,7 @@ def render_dashboard_tab():
             return
 
     if "dashboard_data" not in st.session_state:
-        st.info("Select a date range and click Refresh Data to view insights.")
+        st.info("Click 'Sync Live Data' to fetch the latest insights from WooCommerce and Google Sheets.")
         return
 
     data = st.session_state.dashboard_data
@@ -1078,6 +1078,9 @@ def render_sales_trends(df: pd.DataFrame):
         return
 
     trend_df = df.copy()
+    trend_df["order_date"] = pd.to_datetime(trend_df["order_date"], errors="coerce")
+    trend_df = trend_df[trend_df["order_date"].notna()].copy()
+
     trend_df["order_day"] = trend_df["order_date"].dt.date
     trend_df["day_name"] = trend_df["order_date"].dt.day_name()
     trend_df["day_num"] = trend_df["order_date"].dt.dayofweek

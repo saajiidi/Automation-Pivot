@@ -192,35 +192,27 @@ def _render_order_sync(wc_service: WooCommerceService):
     st.caption("Pull WooCommerce orders, review the preview, then save them into local storage.")
 
     with st.expander("Fetch Settings", expanded=True):
+        # Fixed rolling 120-day window
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=120)
+
         col1, col2 = st.columns(2)
         with col1:
-            start_date = st.date_input(
-                "Start Date",
-                value=APP_DATA_START_DATE,
-                min_value=APP_DATA_START_DATE,
-                max_value=datetime.now().date(),
+            status_filter = st.selectbox(
+                "Order Status",
+                ["any", "completed", "shipped", "processing", "on-hold", "pending"],
+                index=0,
+                help="Select the order status to fetch from WooCommerce.",
             )
         with col2:
-            end_date = st.date_input(
-                "End Date",
-                value=datetime.now().date(),
-                min_value=APP_DATA_START_DATE,
-                max_value=datetime.now().date(),
+            require_tracking = st.checkbox(
+                "Only tracked orders",
+                value=False,
+                help="Keep only orders that include a tracking reference.",
             )
 
-        status_filter = st.selectbox(
-            "Order Status",
-            ["any", "completed", "shipped", "processing", "on-hold", "pending"],
-            index=0,
-            help="Select the order status to fetch from WooCommerce.",
-        )
-        require_tracking = st.checkbox(
-            "Only tracked orders",
-            value=False,
-            help="Keep only orders that include a tracking reference.",
-        )
-
-        fetch_btn = st.button("Fetch Orders", use_container_width=True, type="primary")
+        st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)
+        fetch_btn = st.button("Fetch Fresh Data", use_container_width=True, type="primary")
 
     if not fetch_btn:
         return

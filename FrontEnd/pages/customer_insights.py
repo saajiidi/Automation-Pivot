@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -35,26 +35,12 @@ def render_customer_insight_tab():
         st.info("Customer insights are exclusively powered by WooCommerce API & Historical data for maximum accuracy.")
         include_woo = True
 
-    col1, col2, col3 = st.columns([2, 2, 1])
-    with col1:
-        start_date = st.date_input(
-            "From",
-            value=APP_DATA_START_DATE,
-            min_value=APP_DATA_START_DATE,
-            max_value=date.today(),
-            key="insight_start_date",
-        )
-    with col2:
-        end_date = st.date_input(
-            "To",
-            value=date.today(),
-            min_value=APP_DATA_START_DATE,
-            max_value=date.today(),
-            key="insight_end_date",
-        )
-    with col3:
-        st.markdown("<div style='height: 1.75rem;'></div>", unsafe_allow_html=True)
-        load_clicked = st.button("Refresh Insights", use_container_width=True, type="primary")
+    # Fixed rolling 120-day window
+    end_date = date.today()
+    start_date = end_date - timedelta(days=120)
+
+    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+    load_clicked = st.button("Sync Insights", use_container_width=True, type="primary")
 
     end_date_str = end_date.strftime("%Y-%m-%d")
     history_status = get_woocommerce_full_history_status(end_date=end_date_str)
@@ -94,7 +80,7 @@ def render_customer_insight_tab():
             return
 
     if "customer_insights_df" not in st.session_state:
-        st.info("Select a date range and click Refresh Insights to generate customer data.")
+        st.info("Click 'Sync Insights' to generate customer data for the last 120 days.")
         return
 
     df = st.session_state.customer_insights_df.copy()
