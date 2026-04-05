@@ -6,6 +6,8 @@ Reusable UI components for the Streamlit application.
 from .ui_components import (
     inject_base_styles,
     render_section_card,
+    render_bi_hero,
+    render_commentary_panel,
     render_action_bar,
     render_reset_confirm,
     render_header,
@@ -22,6 +24,8 @@ section_card = render_section_card
 __all__ = [
     "inject_base_styles",
     "render_section_card",
+    "render_bi_hero",
+    "render_commentary_panel",
     "section_card",
     "render_action_bar",
     "render_reset_confirm",
