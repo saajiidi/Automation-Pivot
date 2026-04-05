@@ -13,9 +13,9 @@ def render_woocommerce_tab():
         st.info("To enable this integration, add your API keys to `.streamlit/secrets.toml`:")
         st.code("""
 [woocommerce]
-store_url = "https://your-store.com"
-consumer_key = "ck_your_consumer_key_here"
-consumer_secret = "cs_your_consumer_secret_here"
+store_url = "https://deencommerce.com"
+consumer_key = "ck_954a53b921ceb29ff572460856193d9b57c94c23"
+consumer_secret = "cs_e3c0de58c7b1a8ff116215f5241c192f4b832e49"
         """)
         return
 
