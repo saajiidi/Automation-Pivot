@@ -11,6 +11,7 @@ import streamlit as st
 
 from BackEnd.services.customer_insights import generate_customer_insights
 from BackEnd.services.hybrid_data_loader import (
+    estimate_woocommerce_load_time,
     get_data_summary,
     load_comparison_data,
     load_hybrid_data,
@@ -63,7 +64,10 @@ def render_dashboard_tab():
         st.markdown("<div style='height: 1.75rem;'></div>", unsafe_allow_html=True)
         load_clicked = st.button("Refresh Data", use_container_width=True, type="primary")
 
-    if load_clicked or "dashboard_data" in st.session_state:
+    st.caption(estimate_woocommerce_load_time(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")))
+
+    should_load = load_clicked or "dashboard_data" not in st.session_state
+    if should_load or "dashboard_data" in st.session_state:
         try:
             # Main Sales DF (can be Merged for Trends/Geo)
             df_sales = ensure_sales_schema(
@@ -100,6 +104,10 @@ def render_dashboard_tab():
                 "summary": get_data_summary(),
                 "ml": build_ml_insight_bundle(df_woo_only, df_customers, horizon_days=7),
                 "stock": load_woocommerce_stock_data(),
+                "loaded_from_cache_hint": estimate_woocommerce_load_time(
+                    start_date.strftime("%Y-%m-%d"),
+                    end_date.strftime("%Y-%m-%d"),
+                ),
             }
         except Exception as exc:
             log_error(exc, context="Dashboard Load")
@@ -117,6 +125,7 @@ def render_dashboard_tab():
     summary = data.get("summary", {})
     ml_bundle = data.get("ml", {})
     stock_df = data.get("stock", pd.DataFrame())
+    st.caption(data.get("loaded_from_cache_hint", ""))
 
     tabs = st.tabs([
         "Business Intelligence",
@@ -158,11 +167,13 @@ def render_business_intelligence(df_sales: pd.DataFrame, df_customers: pd.DataFr
 
     render_today_vs_last_day_sales_chart()
     st.divider()
+    render_week_over_week_summary(df_sales, df_customers)
+    st.divider()
 
     view_mode = st.selectbox(
         "Period View",
         ["Quarter", "Month", "Week", "Year"],
-        index=0,
+        index=2,
         key="bi_period_view",
         help="Change the chart grain for revenue, orders, unique customers, and new customers.",
     )
@@ -334,6 +345,51 @@ def build_period_business_metrics(
 
     metrics["new_customers"] = pd.to_numeric(metrics.get("new_customers", 0), errors="coerce").fillna(0).astype(int)
     return metrics[["period", "period_label", "revenue", "orders", "unique_customers", "new_customers"]]
+
+
+def render_week_over_week_summary(df_sales: pd.DataFrame, df_customers: pd.DataFrame):
+    st.markdown("#### Week vs Week Overview")
+    weekly_metrics = build_period_business_metrics(df_sales, df_customers, "Week")
+    if weekly_metrics.empty or len(weekly_metrics) < 2:
+        st.info("Not enough weekly data is available yet for a week-over-week comparison.")
+        return
+
+    latest_two = weekly_metrics.tail(2).copy()
+    latest_two["period_label"] = latest_two["period_label"].astype(str)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        week_revenue = latest_two[["period_label", "revenue"]].rename(
+            columns={"period_label": "Week", "revenue": "Sales Revenue"}
+        )
+        fig_revenue = px.bar(
+            week_revenue,
+            x="Week",
+            y="Sales Revenue",
+            color="Week",
+            title="Week vs Week Revenue",
+            text_auto=".2s",
+        )
+        fig_revenue.update_layout(height=320, showlegend=False)
+        st.plotly_chart(fig_revenue, use_container_width=True)
+    with c2:
+        week_counts = latest_two.melt(
+            id_vars=["period_label"],
+            value_vars=["orders", "unique_customers", "new_customers"],
+            var_name="Metric",
+            value_name="Count",
+        )
+        fig_counts = px.bar(
+            week_counts,
+            x="Metric",
+            y="Count",
+            color="period_label",
+            barmode="group",
+            title="Week vs Week Orders and Customers",
+            labels={"period_label": "Week"},
+        )
+        fig_counts.update_layout(height=320)
+        st.plotly_chart(fig_counts, use_container_width=True)
 
 
 def render_live_stream_comparison():

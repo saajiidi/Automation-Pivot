@@ -1,5 +1,7 @@
 import unittest
 from unittest.mock import patch
+from pathlib import Path
+import tempfile
 
 import pandas as pd
 
@@ -120,6 +122,54 @@ class TestHybridDataLoader(unittest.TestCase):
 
         self.assertFalse(df.empty)
         self.assertEqual(mock_get.call_args.args[0], hybrid_data_loader.COMPARISON_SHEET_URL)
+
+    def test_woocommerce_loader_uses_local_cache_when_range_is_covered(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir)
+            cached_df = pd.DataFrame(
+                {
+                    "order_id": ["1001"],
+                    "order_date": ["2026-04-02 10:00:00"],
+                    "customer_key": ["cust_1"],
+                    "order_total": [1200],
+                    "qty": [1],
+                    "order_item_key": ["1001::polo"],
+                    "source": ["woocommerce_api"],
+                }
+            )
+            cached_df.to_parquet(cache_dir / "woo_orders.parquet", index=False)
+            (cache_dir / "woo_orders_meta.json").write_text(
+                """
+                {
+                  "cached_start": "2026-04-01 00:00:00",
+                  "cached_end": "2026-04-05 23:59:59",
+                  "fetched_at": "2099-04-05 12:00:00"
+                }
+                """,
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(hybrid_data_loader, "_cache_file", side_effect=lambda name: cache_dir / name),
+                patch.object(
+                    hybrid_data_loader,
+                    "get_woocommerce_credentials",
+                    return_value={
+                        "store_url": "https://example.com",
+                        "consumer_key": "ck_test",
+                        "consumer_secret": "cs_test",
+                    },
+                ),
+                patch("BackEnd.services.woocommerce_service.WooCommerceService") as mock_service,
+            ):
+                df = hybrid_data_loader.load_woocommerce_live_data(
+                    start_date="2026-04-01",
+                    end_date="2026-04-05",
+                )
+
+            self.assertFalse(df.empty)
+            self.assertEqual(len(df), 1)
+            mock_service.assert_not_called()
 
 
 if __name__ == "__main__":
