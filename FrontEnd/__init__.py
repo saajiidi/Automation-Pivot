@@ -9,7 +9,7 @@ Structure:
 
 Usage:
     from FrontEnd.pages.dashboard import render_dashboard_tab
-    from FrontEnd.components.cards import section_card
+    from FrontEnd.components import ui
 """
 
 __version__ = "2.5.0"

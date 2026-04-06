@@ -49,17 +49,20 @@ Responsibilities:
 
 ### Shared components
 
-- `FrontEnd/components/ui_components.py`
+- `FrontEnd/components/ui.py` (Central Namespace)
+- `FrontEnd/components/layout.py` (Layout & Theme)
+- `FrontEnd/components/cards.py` (Visual Sections)
+- `FrontEnd/components/charts.py` (Plotly Extensibility)
+- `FrontEnd/components/interactive.py` (Dialogs & Menus)
+- `FrontEnd/components/metrics.py` (Data Badges)
 
 Responsibilities:
 
-- design system styles
-- hero sections
-- commentary cards
-- audit cards
-- highlight stats
-- loaded-date context display
-- export helpers
+- centralized declarative interface (`from FrontEnd.components import ui`)
+- design system styles and Premium BI layout rendering
+- hero sections and commentary cards
+- audit cards and highlight stats
+- component-specific styling logic without bloating a monolith
 
 ## 3. Backend Layers
 
@@ -124,11 +127,11 @@ The current app emphasizes user trust through a few shared rules:
 When adding features:
 
 - put UI composition in `FrontEnd/pages/`
-- put reusable display logic in `FrontEnd/components/ui_components.py`
+- put reusable display logic in `FrontEnd/components/` specific themed files, accessible via the `ui` module
 - put cache, loading, sync, and analytical logic in `BackEnd/services/`
 - reuse the page registry rather than wiring tabs directly in `app.py`
 - prefer extending canonical schema logic before adding page-local column hacks
 
-## 7. Legacy Code
+## 7. Technical Debt
 
-The repository still contains older modules and historical structures under `src/` and some non-primary frontend pages. These remain useful as reference material, but the active product path is the registry-driven Streamlit app described above.
+Legacy unused `.py` scripts and monolith UI references have been cleanly purged to maintain optimal navigation efficiency in the workspace. All features operate explicitly through the `FrontEnd.pages` core loop.

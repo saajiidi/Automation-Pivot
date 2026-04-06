@@ -6,7 +6,9 @@ The current app is organized around four primary workspaces:
 
 - `Business Intelligence`: executive KPIs, sales analysis, customer behavior, inventory, forecasts, and data-audit views
 - `Customer Intelligence`: lifetime customer metrics, RFM segmentation, and retention context
+- `Business Cycles`: operational efficiency analytics reflecting order ingestion vs fulfillment
 - `Commerce Hub`: WooCommerce order sync, inventory fetch, previews, and local storage utilities
+- `ShopAI CRM`: intelligent customer relationship search and insights
 - `System Health`: logs, diagnostics, and operational trust tools
 
 ## Product Direction
@@ -42,7 +44,7 @@ The app now uses lighter defaults for the main BI workflow:
 
 - [app.py](H:/Analysis/Automation-Pivot/app.py): thin application shell, sidebar controls, page registry rendering
 - [FrontEnd/pages/__init__.py](H:/Analysis/Automation-Pivot/FrontEnd/pages/__init__.py): primary page registry and page metadata
-- [FrontEnd/components/ui_components.py](H:/Analysis/Automation-Pivot/FrontEnd/components/ui_components.py): shared design system, highlight cards, commentary blocks, and loaded-date context helpers
+- [FrontEnd/components/ui.py](H:/Analysis/Automation-Pivot/FrontEnd/components/ui.py): consolidated namespace exposing highly thematic declarative layout scripts (`cards.py`, `layout.py`, `charts.py`).
 
 ### Backend
 
@@ -80,7 +82,7 @@ The app uses a WooCommerce local-first strategy:
 
 Recommended areas for future work:
 
-- add more small helpers in `FrontEnd/components/ui_components.py` before duplicating UI markup in pages
+- add more small helpers in `FrontEnd/components/` specific themed files, ensuring it is exported into `ui.py` before duplicating UI markup in pages
 - keep page-specific rendering in `FrontEnd/pages/`
 - keep data retrieval, cache management, and model logic in `BackEnd/services/`
 - keep schema normalization and WooCommerce field cleanup in `BackEnd/utils/`

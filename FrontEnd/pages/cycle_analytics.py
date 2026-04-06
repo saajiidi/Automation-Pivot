@@ -18,15 +18,7 @@ from BackEnd.services.hybrid_data_loader import (
 )
 from BackEnd.services.woocommerce_service import get_woocommerce_credentials, get_woocommerce_store_label
 from BackEnd.utils.sales_schema import ensure_sales_schema
-from FrontEnd.components.ui_components import (
-    audit_card,
-    bi_hero,
-    commentary_panel,
-    highlight_stat,
-    kpi_note,
-    loaded_date_context,
-)
-
+from FrontEnd.components import ui
 BUSINESS_CUTOFF_HOUR = 17
 CLOSED_WEEKDAYS = {4}  # Friday
 NEW_ORDER_STATUSES = {"processing", "on-hold", "pending"}
@@ -49,7 +41,7 @@ def _inject_cycle_styles():
     st.markdown(
         """
         <style>
-        .cycle-window-card {
+        .cycle-window-ui.card {
             background: linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(240,247,250,0.96) 100%);
             border: 1px solid rgba(15, 76, 129, 0.12);
             border-radius: 20px;
@@ -421,7 +413,7 @@ def _build_story_bullets(
 def _render_cycle_window_card(title: str, window: CycleWindow, note: str):
     st.markdown(
         f"""
-        <div class="cycle-window-card">
+        <div class="cycle-window-ui.card">
           <div class="cycle-window-label">{title}</div>
           <div class="cycle-window-range">{window.label}</div>
           <div class="cycle-window-meta">{window.span_hours}-hour closed cycle. {note}</div>
@@ -442,7 +434,7 @@ def _render_metric_block(title: str, current_metrics: dict[str, float], previous
         st.metric("Revenue", _format_currency(current_metrics["revenue"]), _format_delta(current_metrics["revenue"], previous_metrics["revenue"], currency=True))
     with m4:
         st.metric("AOV", _format_currency(current_metrics["basket_value"]), _format_delta(current_metrics["basket_value"], previous_metrics["basket_value"], currency=True))
-    kpi_note(note)
+    ui.badge(note)
 
 
 def render_cycle_analytics_tab():
@@ -452,7 +444,7 @@ def render_cycle_analytics_tab():
     has_credentials = bool(credentials)
     store_label = get_woocommerce_store_label()
 
-    bi_hero(
+    ui.hero(
         "Business Cycles",
         (
             f"Track the latest closed operating cycles for {store_label}. "
@@ -529,7 +521,7 @@ def render_cycle_analytics_tab():
         st.warning("Cycle analytics could not build an order-level view from the loaded sales data.")
         return
 
-    loaded_date_context(
+    ui.date_context(
         requested_start=history_start,
         requested_end=history_end,
         loaded_start=sales_df["order_date"],
@@ -548,7 +540,7 @@ def render_cycle_analytics_tab():
     trend_df = _build_cycle_trend_frame(orders, windows)
 
     headline_value, headline_help = _headline_text(current_new, current_shipped)
-    highlight_stat("Operational balance", headline_value, headline_help)
+    ui.metric_highlight("Operational balance", headline_value, headline_help)
 
     story_bullets = _build_story_bullets(
         current_new,
@@ -558,11 +550,11 @@ def render_cycle_analytics_tab():
         top_new_items,
         top_shipped_cities,
     )
-    commentary_panel("Cycle story", story_bullets)
+    ui.commentary("Cycle story", story_bullets)
 
     shipped_orders_mask = orders["status_bucket"].eq("shipped")
     shipped_missing_anchor = int(shipped_orders_mask.sum() - orders.loc[shipped_orders_mask, "shipped_date"].notna().sum())
-    audit_card(
+    ui.info_box(
         "Metric logic",
         (
             "New-order metrics use order creation time. Shipped metrics use shipped timestamps and fall back to order creation time "

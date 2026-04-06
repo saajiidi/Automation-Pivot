@@ -5,6 +5,7 @@ import streamlit as st
 from FrontEnd.utils.config import APP_TITLE, PRIMARY_NAV
 from FrontEnd.utils.error_handler import ERROR_LOG_FILE, get_logs, log_error
 from FrontEnd.utils.state import init_state, save_state
+from FrontEnd.components import ui
 
 
 _original_dataframe = st.dataframe
@@ -40,10 +41,8 @@ def _clear_error_logs():
 
 
 def _render_workspace_sidebar():
-    from FrontEnd.components import sidebar_branding
-
     with st.sidebar:
-        sidebar_branding()
+        ui.sidebar_branding()
 
         st.caption("Move between BI, customer intelligence, business cycles, and ShopAI CRM from the primary navigation.")
 
@@ -113,14 +112,12 @@ def _render_primary_navigation():
 
 
 def run_app():
-    from FrontEnd.components import inject_base_styles, footer, header
-
     init_state()
-    inject_base_styles()
+    ui.setup_theme()
     _render_workspace_sidebar()
-    header()
+    ui.page_header()
     _render_primary_navigation()
-    footer()
+    ui.page_footer()
 
 
 try:

@@ -148,9 +148,9 @@ def _control_column_index(headers: list[str]) -> tuple[int, str] | tuple[None, N
 
 def _row_fingerprint(headers: list[str], row: list[Any]) -> str:
     values = []
-    for idx, header in enumerate(headers):
+    for idx, page_header in enumerate(headers):
         value = row[idx] if idx < len(row) else ""
-        values.append(f"{header}={str(value).strip()}")
+        values.append(f"{page_header}={str(value).strip()}")
     return "|".join(values)
 
 
@@ -238,7 +238,7 @@ def sync_live_sales_archive(
             )
 
         target_fingerprints = {_row_fingerprint(target_headers, row) for row in target_rows}
-        source_index = {header: idx for idx, header in enumerate(source_headers)}
+        source_index = {page_header: idx for idx, page_header in enumerate(source_headers)}
         eligible = []
         to_append = []
         skipped_existing = 0
@@ -250,8 +250,8 @@ def sync_live_sales_archive(
 
             eligible.append((idx, row))
             aligned_row = [
-                row[source_index[header]] if header in source_index else ""
-                for header in target_headers
+                row[source_index[page_header]] if page_header in source_index else ""
+                for page_header in target_headers
             ]
             fingerprint = _row_fingerprint(target_headers, aligned_row)
             if fingerprint in target_fingerprints:

@@ -20,7 +20,7 @@ def clear_error_logs():
 
 def render_system_health_tab():
     """Renders the System Health and Error Resolution hub."""
-    st.header("System Health & Error Resolver")
+    st.page_header("System Health & Error Resolver")
     st.info(
         "This module captures runtime exceptions, preserves structured diagnostics, and stores AI-ready prompts for future fixes."
     )

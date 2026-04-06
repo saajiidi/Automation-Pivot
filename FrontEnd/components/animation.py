@@ -3,7 +3,7 @@ import base64
 import streamlit as st
 
 
-def bike_animation():
+def animation_bike():
     """
     Renders a full-screen right-to-left overlay animation of a delivery bike.
     This is extracted to a separate file to ensure it can be maintained easily.
@@ -36,7 +36,7 @@ def bike_animation():
     }}
     .full-screen-bike {{
         position: fixed;
-        top: 80px; /* Moved down to prevent header cutting */
+        top: 80px; /* Moved down to prevent page_header cutting */
         right: 0;
         z-index: 9999; /* Overlaps everything */
         pointer-events: none; /* Allows clicking through it */

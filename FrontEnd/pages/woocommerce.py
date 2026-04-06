@@ -9,9 +9,7 @@ from BackEnd.services.woocommerce_service import (
     get_woocommerce_credentials,
     get_woocommerce_store_label,
 )
-from FrontEnd.components.ui_components import loaded_date_context
-
-
+from FrontEnd.components import ui
 def _resolve_preview_columns(df: pd.DataFrame) -> list[str]:
     """Return the best available preview columns across old and new schemas."""
     preferred_groups = [
@@ -242,7 +240,7 @@ def _render_order_sync(wc_service: WooCommerceService):
     preview_cols = _resolve_preview_columns(df)
     loaded_order_dates = pd.to_datetime(df.get("Order Date"), errors="coerce")
     has_loaded_order_dates = isinstance(loaded_order_dates, pd.Series) and not loaded_order_dates.empty and loaded_order_dates.notna().any()
-    loaded_date_context(
+    ui.date_context(
         requested_start=start_date,
         requested_end=end_date,
         loaded_start=loaded_order_dates.min() if has_loaded_order_dates else None,
@@ -282,7 +280,7 @@ def _render_inventory_sync(wc_service: WooCommerceService):
     df_full["Inventory Value"] = df_full["Stock Quantity"] * df_full["Price"]
     imported_at = pd.to_datetime(df_full.get("_imported_at"), errors="coerce")
     has_imported_at = isinstance(imported_at, pd.Series) and not imported_at.empty and imported_at.notna().any()
-    loaded_date_context(
+    ui.date_context(
         requested_start=None,
         requested_end=datetime.now(),
         loaded_start=imported_at.min() if has_imported_at else None,
@@ -340,7 +338,7 @@ def _render_inventory_sync(wc_service: WooCommerceService):
 
 def render_woocommerce_tab():
     """Render the WooCommerce operations page."""
-    st.header("Commerce Hub")
+    st.ui.page_header("Commerce Hub")
     st.caption("Use this workspace to connect WooCommerce, fetch order data, review previews, and manage inventory sync in separate tabs.")
 
     credentials = get_woocommerce_credentials()

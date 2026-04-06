@@ -14,18 +14,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency at runtime
     anthropic = None
 
-from FrontEnd.components.ui_components import (
-    apply_plotly_theme,
-    adaptive_donut,
-    spotlight_bar,
-    audit_card,
-    bi_hero,
-    commentary_panel,
-    highlight_stat,
-    kpi_note,
-)
-
-
+from FrontEnd.components import ui
 MOCK_CONVERSATIONS = [
     {
         "id": "c001",
@@ -289,11 +278,11 @@ def render_shopai_crm_snapshot(customers_df: pd.DataFrame | None = None):
     metric_cols[1].metric("Resolution Rate", f"{kpis['resolution_rate']:.0f}%")
     metric_cols[2].metric("Avg Response", f"{kpis['avg_response_minutes']:.1f} min")
     metric_cols[3].metric("Needs Attention", f"{kpis['needs_attention']:,}")
-    commentary_panel("CRM signals", crm["recommendations"][:3])
+    ui.commentary("CRM signals", crm["recommendations"][:3])
 
     chart_cols = st.columns(2)
     with chart_cols[0]:
-        status_chart = adaptive_donut(
+        status_chart = ui.donut_chart(
             crm["status_mix"],
             values="Conversations",
             names="Status",
@@ -301,7 +290,7 @@ def render_shopai_crm_snapshot(customers_df: pd.DataFrame | None = None):
         )
         st.plotly_chart(status_chart, use_container_width=True)
     with chart_cols[1]:
-        platform_chart = spotlight_bar(
+        platform_chart = ui.bar_chart(
             crm["platform_mix"].sort_values("Conversations"),
             x="Conversations",
             y="Platform",
@@ -324,7 +313,7 @@ def _render_conversation_detail(conversation: dict, crm_frame: pd.DataFrame):
     matched = crm_frame[crm_frame["conversation_id"] == conversation["id"]]
     if not matched.empty:
         row = matched.iloc[0]
-        audit_card(
+        ui.info_box(
             "Customer context",
             (
                 f"Segment: {row['segment']} | Lifetime revenue: {_format_currency(row['total_revenue'])} | "
@@ -412,7 +401,7 @@ def render_shopai_tab():
     crm_frame = crm["conversations"]
     kpis = crm["kpis"]
 
-    bi_hero(
+    ui.hero(
         "ShopAI CRM",
         (
             "Support operations are surfaced as CRM analytics: conversation load, linked customer value, resolution pressure, "
@@ -427,26 +416,26 @@ def render_shopai_tab():
     )
 
     linked_share = (kpis["linked_customers"] / max(kpis["conversations"], 1)) * 100
-    highlight_stat(
+    ui.metric_highlight(
         "CRM pressure",
         f"{kpis['needs_attention']} conversations need action",
         f"{linked_share:.0f}% of the visible queue is matched to customer intelligence.",
     )
-    commentary_panel("CRM narrative", crm["recommendations"])
+    ui.commentary("CRM narrative", crm["recommendations"])
 
     metric_cols = st.columns(4)
     metric_cols[0].metric("Conversations", f"{kpis['conversations']:,}")
     metric_cols[1].metric("Resolution Rate", f"{kpis['resolution_rate']:.0f}%")
     metric_cols[2].metric("Avg Response", f"{kpis['avg_response_minutes']:.1f} min")
     metric_cols[3].metric("Linked Customers", f"{kpis['linked_customers']:,}")
-    kpi_note("Customer linking uses phone first, then normalized name matching against customer intelligence.")
+    ui.badge("Customer linking uses phone first, then normalized name matching against customer intelligence.")
 
     tabs = st.tabs(["CRM Command", "Queue", "Agent Lab", "Commerce Context"])
 
     with tabs[0]:
         top_left, top_right = st.columns(2)
         with top_left:
-            status_chart = adaptive_donut(
+            status_chart = ui.donut_chart(
                 crm["status_mix"],
                 values="Conversations",
                 names="Status",
@@ -454,7 +443,7 @@ def render_shopai_tab():
             )
             st.plotly_chart(status_chart, use_container_width=True)
         with top_right:
-            platform_chart = spotlight_bar(
+            platform_chart = ui.bar_chart(
                 crm["platform_mix"].sort_values("Conversations"),
                 x="Conversations",
                 y="Platform",
@@ -467,7 +456,7 @@ def render_shopai_tab():
 
         bottom_left, bottom_right = st.columns(2)
         with bottom_left:
-            segment_chart = adaptive_donut(
+            segment_chart = ui.donut_chart(
                 crm["segment_mix"],
                 values="Conversations",
                 names="Segment",
@@ -476,7 +465,7 @@ def render_shopai_tab():
             )
             st.plotly_chart(segment_chart, use_container_width=True)
         with bottom_right:
-            tool_chart = spotlight_bar(
+            tool_chart = ui.bar_chart(
                 crm["tool_usage"].sort_values("Calls"),
                 x="Calls",
                 y="Tool",
@@ -571,7 +560,7 @@ def render_shopai_tab():
                 color_continuous_scale="Tealgrn",
                 text_auto=".0f",
             )
-            st.plotly_chart(apply_plotly_theme(stock_chart, height=380), use_container_width=True)
+            st.plotly_chart(ui.apply_plotly_theme(stock_chart, height=380), use_container_width=True)
             st.dataframe(product_df.rename(columns={"name": "Product", "price": "Price", "stock": "Stock", "category": "Category"}), use_container_width=True, hide_index=True)
 
         with commerce_right:
@@ -579,14 +568,14 @@ def render_shopai_tab():
             for order in MOCK_ORDERS_TODAY:
                 st.markdown(
                     f"""
-                    <div class="hub-card" style="padding:0.9rem 1rem;">
+                    <div class="hub-ui.card" style="padding:0.9rem 1rem;">
                         <div style="font-weight:700; color:#102132;">{order['id']} · {order['customer']}</div>
                         <div style="color:#5f7183; margin-top:0.25rem;">{order['total']} · {order['status']}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-            audit_card(
+            ui.info_box(
                 "Why this matters",
                 "Keep ShopAI close to order and stock context so support can resolve tracking, refund, and conversion questions without jumping between tools.",
             )

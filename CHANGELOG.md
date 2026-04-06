@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-04-06
+
+### Changed
+- **Radical UI Architecture Rewrite**: Deleted the monolithic `ui_components.py` file and fragmented it into highly tailored declarative layouts (`cards.py`, `charts.py`, `interactive.py`, etc.).
+- **Extreme Premium BI Design**: Upgraded the `setup_theme` CSS injector with true Glassmorphism overlays (`backdrop-filter`), robust micro-animations on hover, vivid indigo mapping, and Google's `Outfit` typography.
+- Upgraded the namespace to act like native UI components (`from FrontEnd.components import ui`) across all tabs.
+
+### Removed
+- **Unnecessary Files**: Cleaned up the app directory by wiping legacy artifacts, logs, and `debug.json`.
+- Dropped unused standalone applications (`shopai_crm.py`, `cycle_dashboard.py`) and deactivated pages (`ai_assistant.py`, `catwise.py`, `live_stream.py`) that were bloated and unsupported over time.
+
+### Fixed
+- Addressed variable scoping bugs inside the main application launcher (`app.py`).
+
 ## [2.6.0] - 2026-04-05
 
 ### Changed

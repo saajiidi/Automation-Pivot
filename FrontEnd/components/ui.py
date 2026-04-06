@@ -1,12 +1,7 @@
-"""Frontend Components Module
-
-Reusable UI components for the Streamlit application.
+"""DEEN Commerce UI Elements Dashboard Abstraction.
+Use `from FrontEnd.components import ui` and access components like `ui.hero(...)`.
 """
 
-from .ui import *
-
-# Explicitly expose everything available in `ui` just in case legacy code 
-# still tries `from FrontEnd.components import card`
 from .layout import setup_theme, sidebar_branding, page_header, page_footer
 from .cards import card, hero, commentary, info_box
 from .metrics import metric_highlight, badge, date_context
@@ -40,5 +35,4 @@ __all__ = [
     "show_last_updated",
     "animation_bike",
     "floating_chat",
-    "ui"
 ]
