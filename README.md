@@ -8,7 +8,7 @@ The current app is organized around four primary workspaces:
 - `Customer Intelligence`: lifetime customer metrics, RFM segmentation, and retention context
 - `Business Cycles`: operational efficiency analytics reflecting order ingestion vs fulfillment
 - `Commerce Hub`: WooCommerce order sync, inventory fetch, previews, and local storage utilities
-- `ShopAI CRM`: intelligent customer relationship search and insights
+- `CRM Analytics`: intelligent customer relationship search and insights
 - `System Health`: logs, diagnostics, and operational trust tools
 
 ## Product Direction

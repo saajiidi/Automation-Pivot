@@ -534,7 +534,7 @@ def sidebar_branding():
                 DEEN Commerce BI
             </div>
             <div style="font-size:0.85rem; color:#64748b; margin-top:0.25rem;">
-                Unified commerce intelligence for revenue, customers, cycles, and ShopAI CRM.
+                Unified commerce intelligence for revenue, customers, cycles, and CRM Analytics.
             </div>
             <div style="font-size:0.8rem; color:#64748b; margin-top:0.45rem;">
                 {APP_VERSION}

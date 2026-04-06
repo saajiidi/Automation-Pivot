@@ -9,7 +9,7 @@ PRIMARY_NAV = (
     "Customer Intelligence",
     "Commerce Hub",
     "Business Cycles",
-    "ShopAI CRM",
+    "CRM Analytics",
     "System Health",
 )
 
@@ -37,7 +37,7 @@ PRIMARY_PAGE_CONFIG = (
     },
     {
         "key": "shop_ai_crm",
-        "label": "ShopAI CRM",
+        "label": "CRM Analytics",
         "description": "CRM analytics for support conversations, customer routing, and agent workflow testing.",
     },
     {

@@ -402,7 +402,7 @@ def render_shopai_tab():
     kpis = crm["kpis"]
 
     ui.hero(
-        "ShopAI CRM",
+        "CRM Analytics",
         (
             "Support operations are surfaced as CRM analytics: conversation load, linked customer value, resolution pressure, "
             "and the highest-priority follow-ups for the team."
