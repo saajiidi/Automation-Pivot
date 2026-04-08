@@ -63,6 +63,22 @@ def generate_forecasts(daily_df: pd.DataFrame, metric: str = "revenue", horizon:
         models_predictions["Linear Trend"] = fc_lr.clip(lower=0)
     except Exception:
         pass
+        
+    # 5. Naive Forecast (Last Value Carry-Forward)
+    fc_naive = pd.Series([y.iloc[-1]] * horizon, index=future_dates)
+    models_predictions["Naive Baseline"] = fc_naive.clip(lower=0)
+    
+    # 6. Random Forest (Tree-based Regression)
+    try:
+        from sklearn.ensemble import RandomForestRegressor
+        X = np.arange(len(y)).reshape(-1, 1)
+        rf = RandomForestRegressor(n_estimators=50, random_state=42)
+        rf.fit(X, y)
+        X_pred = np.arange(len(y), len(y) + horizon).reshape(-1, 1)
+        fc_rf = pd.Series(rf.predict(X_pred), index=future_dates)
+        models_predictions["Random Forest"] = fc_rf.clip(lower=0)
+    except Exception:
+        pass
 
     if not models_predictions:
          return {"error": "All ML models failed to converge on this dataset. Try selecting a broader time window."}
@@ -87,6 +103,12 @@ def generate_forecasts(daily_df: pd.DataFrame, metric: str = "revenue", horizon:
                     if sp < 2: raise ValueError()
                     m = ExponentialSmoothing(y_train, seasonal='add', seasonal_periods=sp, trend='add', initialization_method="estimated").fit()
                     preds = m.forecast(test_size)
+                elif name == "Naive Baseline":
+                    preds = pd.Series([y_train.iloc[-1]] * test_size)
+                elif name == "Random Forest":
+                    from sklearn.ensemble import RandomForestRegressor
+                    rf_m = RandomForestRegressor(n_estimators=50, random_state=42).fit(np.arange(len(y_train)).reshape(-1,1), y_train)
+                    preds = rf_m.predict(np.arange(len(y_train), len(y_train)+test_size).reshape(-1,1))
                 else:
                     lr_m = LinearRegression().fit(np.arange(len(y_train)).reshape(-1,1), y_train)
                     preds = lr_m.predict(np.arange(len(y_train), len(y_train)+test_size).reshape(-1,1))

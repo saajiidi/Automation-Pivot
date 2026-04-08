@@ -167,7 +167,7 @@ def render_market_overview_timeseries(df_sales: pd.DataFrame):
     render_ml_forecast_charts(daily)
 
 def render_ml_forecast_charts(daily: pd.DataFrame):
-    st.markdown("#### 🤖 Predictive Market Forecasting (ML Pipeline)")
+    st.markdown("#### 🤖 Predictive Market Forecasting Ensembles")
     
     try:
         from BackEnd.services.ts_forecast import generate_forecasts
@@ -175,38 +175,74 @@ def render_ml_forecast_charts(daily: pd.DataFrame):
         st.warning("Time-series forecasting module not loaded.")
         return
         
-    with st.spinner("Training predictive models (ARIMA, SARIMA, Holt-Winters)..."):
-        res = generate_forecasts(daily, metric="revenue", horizon=7)
-        
-    if "error" in res:
-        st.info(f"⚠️ {res['error']}")
-        return
-        
-    y = res["history"]
-    forecasts = res["forecasts"]
-    best_model = res["best_model"]
+    metrics_to_forecast = {
+        "revenue": "Revenue (TK)",
+        "orders": "Order Volume",
+        "units": "Items Sold",
+        "aov": "Average Order Value"
+    }
     
-    st.success(f"**ML Verdict Benchmark:** The `{best_model}` algorithm successfully evaluated as the most accurate architecture for this trend based on historical trailing-window evaluation.")
-    
+    if "aov" not in daily.columns:
+        daily["aov"] = daily["revenue"] / daily["orders"].replace(0, 1)
+
+    # Shared Indicator (Common Legend)
+    st.markdown("""
+        <div style='display:flex; flex-wrap:wrap; justify-content:center; gap:20px; font-size:0.9rem; font-weight:600; padding:10px 0 20px 0; color:var(--text-strong);'>
+            <div><span style='color:#1E293B; font-size:1.2em;'>●</span> Historical Signal</div>
+            <div><span style='color:#F59E0B; font-size:1.2em;'>●</span> ARIMA</div>
+            <div><span style='color:#10B981; font-size:1.2em;'>●</span> SARIMA</div>
+            <div><span style='color:#EC4899; font-size:1.2em;'>●</span> Holt-Winters</div>
+            <div><span style='color:#8B5CF6; font-size:1.2em;'>●</span> Linear Trend</div>
+            <div><span style='color:#3B82F6; font-size:1.2em;'>●</span> Naive Baseline</div>
+            <div><span style='color:#EF4444; font-size:1.2em;'>●</span> Random Forest</div>
+        </div>
+    """, unsafe_allow_html=True)
+
     c1, c2 = st.columns(2)
     cols = [c1, c2, c1, c2]
-    
-    models_list = list(forecasts.keys())
-    for i, model_name in enumerate(models_list[:4]):
-        fc = forecasts[model_name]
-        
-        hist_df = pd.DataFrame({"Date": y.index, "Revenue": y.values, "Data Split": "Historical"})
-        fc_df = pd.DataFrame({"Date": fc.index, "Revenue": fc.values, "Data Split": "Prediction"})
-        plot_df = pd.concat([hist_df, fc_df])
-        
-        star = "⭐ Best Evaluated Fit: " if model_name == best_model else ""
-        title = f"{star}{model_name} Forecast (7 Days)"
-        
-        fig = px.line(plot_df, x="Date", y="Revenue", color="Data Split", title=title, 
-                      color_discrete_map={"Historical": "#4F46E5", "Prediction": "#F59E0B"})
-        
-        if model_name == best_model:
-             fig.update_traces(line=dict(width=3))
-             
-        fig.update_layout(height=320, margin=dict(l=0, r=0, t=40, b=0), hovermode="x unified", template="plotly_white", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        cols[i].plotly_chart(fig, use_container_width=True)
+
+    for i, (metric_key, metric_title) in enumerate(metrics_to_forecast.items()):
+        with cols[i]:
+            with st.spinner(f"Training ensembles for {metric_title}..."):
+                res = generate_forecasts(daily, metric=metric_key, horizon=7)
+                
+            if "error" in res:
+                st.info(f"⚠️ {metric_title} Forecast: {res['error']}")
+                continue
+                
+            y = res["history"]
+            forecasts = res["forecasts"]
+            best_model = res["best_model"]
+            
+            # Combine all history and forecasts into one unified graph
+            plot_df = pd.DataFrame({"Date": y.index, metric_title: y.values, "Model": "Historical Signal"})
+            
+            for model_name, fc in forecasts.items():
+                fc_df = pd.DataFrame({"Date": fc.index, metric_title: fc.values, "Model": model_name})
+                plot_df = pd.concat([plot_df, fc_df])
+                
+            fig = px.line(plot_df, x="Date", y=metric_title, color="Model", 
+                          title=f"{metric_title} Prediction (⭐ Best: {best_model})",
+                          color_discrete_map={
+                              "Historical Signal": "#1E293B", 
+                              "ARIMA": "#F59E0B",
+                              "SARIMA": "#10B981",
+                              "Holt-Winters": "#EC4899",
+                              "Linear Trend": "#8B5CF6",
+                              "Naive Baseline": "#3B82F6",
+                              "Random Forest": "#EF4444"
+                          }, line_shape="spline")
+            
+            for trace in fig.data:
+                if trace.name == "Historical Signal":
+                    trace.line.width = 4
+                elif trace.name == best_model:
+                    trace.line.width = 3
+                    trace.line.dash = "solid"
+                else:
+                    trace.line.width = 2
+                    trace.line.dash = "dot"
+                    trace.opacity = 0.6
+                     
+            fig.update_layout(height=400, margin=dict(l=0, r=0, t=60, b=0), hovermode="x unified", template="plotly_white", showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
