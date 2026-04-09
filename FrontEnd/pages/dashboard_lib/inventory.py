@@ -5,65 +5,109 @@ from datetime import datetime
 from FrontEnd.components import ui
 from BackEnd.core.categories import get_category_for_sales
 
+def get_clean_product_name(name):
+    """Strips size/color segments from product name."""
+    parts = [p.strip() for p in str(name).split("-") if p.strip()]
+    if len(parts) >= 3: return "-".join(parts[:-2]).strip()
+    elif len(parts) == 2: return parts[0]
+    return str(name)
+
 def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, df_sales: pd.DataFrame = None):
     st.subheader("Inventory Health")
     
-    # 0. Inventory Sniper (Search Engine)
+    if stock_df is None or stock_df.empty:
+        st.info("No live stock snapshot is available yet.")
+        return
+        
+    inventory = stock_df.copy()
+    
+    # Pre-processing Clean Names & Categories
+    inventory["_clean_name"] = inventory["Name"].apply(get_clean_product_name)
+    if "Category" not in inventory.columns:
+        inventory["Category"] = inventory["Name"].apply(get_category_for_sales)
+        
+    # 0. Inventory Sniper (Structured Search)
     st.markdown("#### 🎯 Inventory Sniper")
-    st.caption("Search for a specific Product Name or SKU to see variation-wise stock and sales volume.")
+    st.caption("Select a Category and Product to see specific variant stock and sales performance.")
     
-    c_sn1, c_sn2 = st.columns([4, 1])
-    with c_sn1:
-        sniper_q = st.text_input("Sniper Scan", placeholder="Enter Product Name or SKU...", label_visibility="collapsed", key="inventory_sniper_input").strip()
-    with c_sn2:
-        sniper_trigger = st.button("🛰️ Scan Item", key="btn_sniper_trigger", use_container_width=True)
+    f_c1, f_c2, f_c3 = st.columns(3)
     
-    if sniper_q or sniper_trigger:
-        if not sniper_q:
-            st.warning("Please enter a SKU or Product Name.")
-        elif stock_df is not None:
-            # Search in stock
-            is_sku = stock_df["SKU"].astype(str) == sniper_q
-            is_name = stock_df["Name"].str.contains(sniper_q, case=False, na=False)
-            sniper_results = stock_df[is_sku | is_name].copy()
-            
-            if not sniper_results.empty:
-                st.success(f"Sniper Scan complete. Found {len(sniper_results)} matches.")
-                
-                # Cross-reference with Sales Volume if available
-                if df_sales is not None:
-                    # Match by Name or SKU in sales
-                    s_sku = df_sales["sku"].astype(str) == sniper_q
-                    s_name = df_sales["item_name"].str.contains(sniper_q, case=False, na=False)
-                    sales_match = df_sales[s_sku | s_name]
-                    
-                    total_sold = sales_match["qty"].sum()
-                    total_rev = sales_match["order_total"].sum()
-                else:
-                    total_sold = 0
-                    total_rev = 0
-                
-                k1, k2, k3 = st.columns(3)
-                k1.metric("Current Stock (Total)", f"{int(sniper_results['Stock Quantity'].sum())}")
-                k2.metric("Total items sold", f"{int(total_sold):,}")
-                k3.metric("Total sale value", f"৳{total_rev:,.0f}")
-                
-                # Tweak 1: Stock-out Countdown (Velocity Analysis)
-                avg_velocity = total_sold / 30 # Baseline 30-day velocity estimate
-                if avg_velocity > 0:
-                    days_left = sniper_results['Stock Quantity'].sum() / avg_velocity
-                    if days_left < 7:
-                        st.error(f"🚨 **Stock-out Risk**: This item is selling {avg_velocity:.1f} units/30d and will be gone in approximately **{int(days_left)} days**.")
-                    elif days_left < 15:
-                        st.warning(f"⚠️ **Restock Advised**: Approximately **{int(days_left)} days** of stock remaining.")
-                    else:
-                        st.success(f"✅ **Healthy Velocity**: **{int(days_left)} days** of stock available at current sales rate.")
+    with f_c1:
+        cat_list = sorted([str(c) for c in inventory["Category"].dropna().unique() if str(c).strip()])
+        sel_cat = st.selectbox("Category", ["All"] + cat_list, index=0, key="sniper_cat_select")
+        active_cat = None if sel_cat == "All" else sel_cat
 
-                st.markdown("**Variation-wise Stock Breakdown:**")
-                st.dataframe(sniper_results[["Name", "SKU", "Stock Status", "Stock Quantity", "Price"]], use_container_width=True, hide_index=True)
-                st.divider()
+    with f_c2:
+        # Filter products by category
+        prod_options = inventory[inventory["Category"] == active_cat] if active_cat else inventory
+        prod_options = prod_options.copy()
+        prod_options["_display_name"] = prod_options["_clean_name"] + " [" + prod_options["SKU"].astype(str).str.split("-").str[0] + "]"
+        
+        avail_prods = sorted([str(p) for p in prod_options["_display_name"].unique() if str(p).strip()])
+        sel_prod = st.selectbox("Product (Name + Parent SKU)", ["All"] + avail_prods, index=0, key="sniper_prod_select")
+        active_prod = None if sel_prod == "All" else sel_prod
+
+    with f_c3:
+        # Filter variations by product
+        var_options = prod_options[prod_options["_display_name"] == active_prod] if active_prod else prod_options
+        avail_skus = sorted([str(s) for s in var_options["SKU"].unique() if str(s).strip()])
+        sel_sku = st.selectbox("Variation (SKU)", ["All"] + avail_skus, index=0, key="sniper_sku_select")
+        active_sku = None if sel_sku == "All" else sel_sku
+
+    # Determine Sniper Results
+    sniper_results = inventory.copy()
+    if active_cat: sniper_results = sniper_results[sniper_results["Category"] == active_cat]
+    if active_prod:
+        # Map back from display name to cleaner filtering
+        target_clean = active_prod.split(" [")[0]
+        sniper_results = sniper_results[sniper_results["_clean_name"] == target_clean]
+    if active_sku: sniper_results = sniper_results[sniper_results["SKU"] == active_sku]
+
+    # Only show sniper details if at least a product is selected
+    if active_prod:
+        st.markdown(f"**Detailed Analysis for:** `{sel_prod}`" + (f" - Variation `{active_sku}`" if active_sku else ""))
+        
+        # Cross-reference with Sales Volume if available
+        if df_sales is not None:
+            sales_match = df_sales.copy()
+            # Clean names for sales as well
+            if "_clean_name" not in sales_match.columns:
+                sales_match["_clean_name"] = sales_match["item_name"].apply(get_clean_product_name)
+            
+            # Apply same filtering logic to sales
+            sales_match = sales_match[sales_match["_clean_name"] == target_clean]
+            if active_sku:
+                sales_match = sales_match[sales_match["sku"].astype(str) == active_sku]
+            
+            total_sold = sales_match["qty"].sum()
+            total_rev = sales_match["item_revenue"].sum()
+        else:
+            total_sold = 0
+            total_rev = 0
+        
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Current Stock (Total)", f"{int(sniper_results['Stock Quantity'].sum())}")
+        k2.metric("Total items sold", f"{int(total_sold):,}")
+        k3.metric("Total sale value", f"৳{total_rev:,.0f}")
+        
+        # Stock-out Countdown (Velocity Analysis)
+        avg_velocity = total_sold / 30 # Baseline 30-day velocity estimate
+        if avg_velocity > 0:
+            days_left = sniper_results['Stock Quantity'].sum() / avg_velocity
+            if days_left < 7:
+                st.error(f"🚨 **Stock-out Risk**: This item is selling {avg_velocity:.1f} units/30d and will be gone in approximately **{int(days_left)} days**.")
+            elif days_left < 15:
+                st.warning(f"⚠️ **Restock Advised**: Approximately **{int(days_left)} days** of stock remaining.")
             else:
-                st.info("No stock records match this scan.")
+                st.success(f"✅ **Healthy Velocity**: **{int(days_left)} days** of stock available at current sales rate.")
+
+        st.markdown("**Variation-wise Stock Breakdown:**")
+        st.dataframe(sniper_results[["Name", "SKU", "Stock Status", "Stock Quantity", "Price"]], use_container_width=True, hide_index=True)
+        st.divider()
+    elif active_cat:
+        st.info(f"Selected category: `{active_cat}`. Select a product for a detailed sniper scan.")
+    else:
+        st.info("Select a product above to trigger a detailed Sniper Scan.")
 
     if stock_df is None or stock_df.empty:
         st.info("No live stock snapshot is available yet.")
