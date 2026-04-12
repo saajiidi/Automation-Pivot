@@ -36,6 +36,13 @@ def get_product_category(name: str) -> str:
     name_str = name.lower()
     for cat, keywords in CATEGORY_MAPPING.items():
         if any(kw.lower() in name_str for kw in keywords):
+            if cat == 'Jeans':
+                if any(kw in name_str for kw in ['slim']):
+                    return "Jeans - Slim Fit"
+                if any(kw in name_str for kw in ['regular']):
+                    return "Jeans - Regular Fit"
+                if any(kw in name_str for kw in ['straight']):
+                    return "Jeans - Straight Fit"
             return cat
     
     # Special handling for T-Shirts and Shirts (Sleeve Logic)

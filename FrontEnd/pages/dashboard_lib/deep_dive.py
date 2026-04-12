@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 from FrontEnd.components import ui
-from BackEnd.core.categories import parse_sku_variants, get_clean_product_name, sort_categories
+from BackEnd.core.categories import parse_sku_variants, get_clean_product_name, sort_categories, format_category_label
 
 def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
 
@@ -74,18 +74,28 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
     # FILTER CONTROL CENTER
     with st.expander("🛠️ Advanced Cluster Filters", expanded=True):
         st.markdown("**📦 Category & Operations**")
-        f_c1, f_c2, f_c3, f_c4, f_c5 = st.columns(5)
+        f_c1, f_c2, f_c3, f_c4 = st.columns(4)
         
         with f_c1:
             # 1. Category
-            raw_cats = [str(c) for c in df_sales["Category"].dropna().unique() if str(c).strip()]
-            cat_list = sort_categories(raw_cats)
-            sel_cats = st.multiselect("Categories", ["All"] + cat_list, default=["All"])
+            raw_cats = list(df_sales["Category"].dropna().unique())
+            # Ensure parent categories like 'Jeans' exist if children do
+            if any(str(c).startswith("Jeans - ") for c in raw_cats) and "Jeans" not in raw_cats:
+                raw_cats.append("Jeans")
+                
+            cat_list = sort_categories([str(c) for c in raw_cats if str(c).strip()])
+            sel_cats = st.multiselect("Categories", ["All"] + cat_list, default=["All"], format_func=format_category_label)
             active_cats = [] if "All" in sel_cats or not sel_cats else sel_cats
 
         with f_c2:
             # Combined Product Name & SKU selection
-            sku_options = df_sales[df_sales["Category"].isin(active_cats)] if active_cats else df_sales
+            if active_cats:
+                mask = pd.Series(False, index=df_sales.index)
+                for cat in active_cats:
+                    mask |= df_sales["Category"].str.startswith(cat, na=False)
+                sku_options = df_sales[mask]
+            else:
+                sku_options = df_sales
             sku_options = sku_options.copy()
             sku_options["_display_name"] = sku_options["_clean_name"] + " [" + sku_options["sku"].astype(str) + "]"
             
@@ -110,26 +120,22 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
             sel_trends = st.multiselect("Trend Velocity", ["All"] + avail_trends, default=["All"])
             active_trends = [] if "All" in sel_trends or not sel_trends else sel_trends
 
-        with f_c5:
-            # 5. Status Filter (Align with Executive Pillars)
-            avail_stats = sorted([str(s) for s in df_sales["order_status"].dropna().unique() if str(s).strip()])
-            
-            # Default to match executive pillars
-            default_stats = [s for s in ["completed", "shipped"] if s in avail_stats]
-            if not default_stats: default_stats = ["All"]
-            
-            sel_stats = st.multiselect("Order Status", ["All"] + avail_stats, default=default_stats)
-            active_stats = [] if "All" in sel_stats or not sel_stats else sel_stats
+
 
     # APPLY COMPREHENSIVE FILTERING
     w_df = df_sales.copy()
-    if active_cats: w_df = w_df[w_df["Category"].isin(active_cats)]
+    if active_cats: 
+        # Hierarchical Match: Include children if parent is selected
+        mask = pd.Series(False, index=w_df.index)
+        for cat in active_cats:
+            mask |= w_df["Category"].str.startswith(cat, na=False)
+        w_df = w_df[mask]
     if active_items: 
         w_df["_display_name"] = w_df["_clean_name"] + " [" + w_df["sku"].astype(str) + "]"
         w_df = w_df[w_df["_display_name"].isin(active_items)]
     if active_sizes: w_df = w_df[w_df["_size"].isin(active_sizes)]
     if active_trends: w_df = w_df[w_df["Trend"].isin(active_trends)]
-    if active_stats: w_df = w_df[w_df["order_status"].isin(active_stats)]
+
 
     if w_df.empty:
         st.warning("No sales data matches the active filter cluster. Adjust filters to refine your search.")

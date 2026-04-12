@@ -55,13 +55,20 @@ def get_category_for_orders(name) -> str:
 
 # Master Category Priority (Determines the 'Flow' in UI Dropdowns)
 CATEGORIES_PRIORITY = [
-    "Tank Top", "Boxer", "Jeans", "Denim Shirt", "Flannel Shirt", "Polo Shirt",
+    "Tank Top", "Boxer", "Jeans", "Jeans - Slim Fit", "Jeans - Regular Fit", "Jeans - Straight Fit", "Denim Shirt", "Flannel Shirt", "Polo Shirt",
     "Panjabi", "Trousers", "Joggers", "Twill Chino", "Mask", "Leather Bag",
     "Water Bottle", "Contrast Shirt", "Turtleneck", "Drop Shoulder", "Wallet",
     "Kaftan Shirt", "Active Wear", "Jersy", "Sweatshirt", "Jacket", "Belt",
     "Sweater", "Passport Holder", "Card Holder", "Cap", "FS T-Shirt", "HS T-Shirt",
     "FS Shirt", "HS Shirt", "Others"
 ]
+
+def format_category_label(cat: str) -> str:
+    """Formats a category string for hierarchical display in UI dropdowns."""
+    if not cat: return cat
+    if cat in ["Jeans - Slim Fit", "Jeans - Regular Fit", "Jeans - Straight Fit"]:
+        return f"   └─ {cat.split(' - ')[1]}"
+    return cat
 
 def sort_categories(cats):
     """Sorts a list of categories based on the defined priority."""
@@ -110,6 +117,13 @@ def get_category_for_sales(name) -> str:
 
     for cat, keywords in specific_cats.items():
         if _has_any(keywords, name_str):
+            if cat == "Jeans":
+                if _has_any(["slim"], name_str):
+                    return "Jeans - Slim Fit"
+                if _has_any(["regular"], name_str):
+                    return "Jeans - Regular Fit"
+                if _has_any(["straight"], name_str):
+                    return "Jeans - Straight Fit"
             return cat
 
     fs_keywords = ["full sleeve", "long sleeve", "fs", "l/s"]

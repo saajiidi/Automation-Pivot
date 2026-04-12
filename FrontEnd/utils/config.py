@@ -2,7 +2,7 @@ from datetime import date
 
 APP_TITLE = "DEEN Business Intelligence"
 APP_VERSION = "v10.0"
-APP_DATA_START_DATE = date(2022, 8, 1)
+APP_DATA_START_DATE = date(2021, 8, 1)
 
 MORE_TOOLS = [
     "System Logs",

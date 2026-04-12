@@ -4,7 +4,7 @@ import plotly.express as px
 import numpy as np
 from datetime import datetime
 from FrontEnd.components import ui
-from BackEnd.core.categories import get_category_for_sales, parse_sku_variants, get_clean_product_name, sort_categories
+from BackEnd.core.categories import get_category_for_sales, parse_sku_variants, get_clean_product_name, sort_categories, format_category_label
 
 def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, df_sales: pd.DataFrame = None):
     st.subheader("Stock Insight")
@@ -73,7 +73,7 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
     with f_c1:
         raw_cats = [str(c) for c in inventory["Category"].dropna().unique() if str(c).strip()]
         cat_list = sort_categories(raw_cats)
-        sel_cat = st.selectbox("Category", ["All"] + cat_list, index=0, key="sniper_cat_select")
+        sel_cat = st.selectbox("Category", ["All"] + cat_list, index=0, key="sniper_cat_select", format_func=format_category_label)
         active_cat = None if sel_cat == "All" else sel_cat
 
     with f_c2:

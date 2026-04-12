@@ -5,7 +5,7 @@ import streamlit as st
 import numpy as np
 from streamlit_autorefresh import st_autorefresh
 
-from FrontEnd.utils.config import APP_TITLE
+from FrontEnd.utils.config import APP_TITLE, APP_DATA_START_DATE
 from FrontEnd.utils.error_handler import ERROR_LOG_FILE, get_logs, log_error
 from FrontEnd.utils.state import init_state, save_state
 from FrontEnd.components import ui
@@ -74,10 +74,10 @@ def _render_workspace_sidebar():
         if st.session_state.get("time_window") == "Custom Date Range":
             col1, col2 = st.columns(2)
             with col1:
-                st.date_input("Start Date", value=datetime.now().date() - timedelta(days=7), key="wc_sync_start_date")
+                st.date_input("Start Date", value=datetime.now().date() - timedelta(days=7), min_value=APP_DATA_START_DATE, max_value=datetime.now().date(), key="wc_sync_start_date")
                 
             with col2:
-                st.date_input("End Date", value=datetime.now().date(), key="wc_sync_end_date")
+                st.date_input("End Date", value=datetime.now().date(), min_value=APP_DATA_START_DATE, max_value=datetime.now().date(), key="wc_sync_end_date")
                 
         st.divider()
 

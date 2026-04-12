@@ -16,6 +16,12 @@ def get_category_from_name(name):
     if has_keyword("boxer", name_str):
         return "Boxer"
     if has_keyword("jeans", name_str):
+        if has_keyword("slim", name_str):
+            return "Jeans - Slim Fit"
+        if has_keyword("regular", name_str):
+            return "Jeans - Regular Fit"
+        if has_keyword("straight", name_str):
+            return "Jeans - Straight Fit"
         return "Jeans"
     if has_keyword("denim", name_str):
         return "Denim"

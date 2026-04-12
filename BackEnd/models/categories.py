@@ -91,6 +91,13 @@ def get_category_for_sales(name) -> str:
 
     for cat, keywords in specific_cats.items():
         if _has_any(keywords, name_str):
+            if cat == "Jeans":
+                if _has_any(["slim"], name_str):
+                    return "Jeans - Slim Fit"
+                if _has_any(["regular"], name_str):
+                    return "Jeans - Regular Fit"
+                if _has_any(["straight"], name_str):
+                    return "Jeans - Straight Fit"
             return cat
 
     fs_keywords = ["full sleeve", "long sleeve", "fs", "l/s"]

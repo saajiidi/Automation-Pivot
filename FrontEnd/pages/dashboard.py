@@ -307,6 +307,22 @@ def render_customer_insight_tab(reg_rev: float, guest_rev: float, total_accounts
         st.warning("No customer segments identified in this period.")
         return
 
+    # v10.5: Account Registrations Summary (Moved to Top for Visibility)
+    st.markdown("### 🔐 Account Registrations")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Registered Customers", f"{total_accounts:,}")
+    
+    reg_pct = (reg_rev / (reg_rev + guest_rev) * 100) if (reg_rev + guest_rev) > 0 else 0
+    m2.metric("Registered Revenue Share", f"{reg_pct:.1f}%")
+    
+    is_reg = df["customer_id"].str.startswith("reg_", na=False)
+    reg_aov = df[is_reg]["avg_order_value"].mean()
+    gst_aov = df[~is_reg]["avg_order_value"].mean()
+    gap = ((reg_aov - gst_aov) / gst_aov * 100) if gst_aov > 0 else 0
+    m3.metric("Member vs. Guest AOV", f"{gap:+.1f}% Gap", help="Registered members usually spend significantly more per order.")
+    
+    st.divider()
+
     # Visual Segments sequentially rendered
     st.markdown("### 📊 Value Segments")
     if True:
@@ -344,21 +360,7 @@ def render_customer_insight_tab(reg_rev: float, guest_rev: float, total_accounts
             use_container_width=True, hide_index=True
         )
 
-    st.divider()
-    st.markdown("### 🔐 Account Registrations")
-    if True:
-        st.markdown("#### 🔐 Account Holder Intelligence")
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Lifetime User Accounts", f"{total_accounts:,}")
-        
-        reg_pct = (reg_rev / (reg_rev + guest_rev) * 100) if (reg_rev + guest_rev) > 0 else 0
-        m2.metric("Registered Revenue Share", f"{reg_pct:.1f}%")
-        
-        is_reg = df["customer_id"].str.startswith("reg_", na=False)
-        reg_aov = df[is_reg]["avg_order_value"].mean()
-        gst_aov = df[~is_reg]["avg_order_value"].mean()
-        gap = ((reg_aov - gst_aov) / gst_aov * 100) if gst_aov > 0 else 0
-        m3.metric("Member vs. Guest AOV", f"{gap:+.1f}% Gap", help="Registered members usually spend significantly more per order.")
+
         
         st.divider()
         c5, c6 = st.columns(2)
