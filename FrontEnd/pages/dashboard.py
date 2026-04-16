@@ -382,36 +382,6 @@ def render_intelligence_hub_page():
             </div>
             """, unsafe_allow_html=True)
             
-        # 🧾 Performance Report Download
-        st.markdown("---")
-        ex1, ex2 = st.columns([3, 1])
-        with ex1:
-            st.markdown("#### 🧾 Executive Performance Summary")
-            st.caption("Download a high-level performance matrix including category-wise revenue and volume distribution.")
-        with ex2:
-            from datetime import datetime
-            # Build Performance Matrix
-            from BackEnd.core.categories import get_display_category
-            perf_df = data["sales_active"].groupby("Category").agg(
-                Revenue=("item_revenue", "sum"),
-                Orders=("order_id", "nunique"),
-                Units=("qty", "sum")
-            ).reset_index().sort_values("Revenue", ascending=False)
-            perf_df["AOV"] = (perf_df["Revenue"] / perf_df["Orders"]).round(2)
-            
-            # Context-Aware Labels (Sub-category if filtered, else Parent)
-            selected_cats = st.session_state.get("global_categories", ["All"])
-            perf_df["Category"] = perf_df["Category"].apply(lambda x: get_display_category(x, selected_cats))
-            
-            perf_bytes = ui.export_to_excel(perf_df, "Performance Matrix")
-            st.download_button(
-                label="📊 Export Executive Deck (XLS)",
-                data=perf_bytes,
-                file_name=f"deen_performance_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-
         st.divider()
         render_sales_overview_timeseries(data["sales_active"], ml_bundle=data["ml"])
 
