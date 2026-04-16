@@ -28,12 +28,6 @@ logger = get_logger("returns_tracker_page")
 def render_returns_tracker_page() -> None:
     """Main entry point for the Returns & Net Sales Tracker page."""
 
-    st.markdown("### 🔄 Returns & Net Sales Tracker")
-    st.caption(
-        "Track returns, partial orders, and exchanges. "
-        "Calculate Net Sales from delivery-issue intelligence."
-    )
-
     # ── Auto Data Sync ──
     sync_window = get_current_sync_window()
     if "returns_data" not in st.session_state or st.session_state.get("last_returns_sync") != sync_window:
@@ -41,41 +35,42 @@ def render_returns_tracker_page() -> None:
             st.session_state.returns_data = load_returns_data(sync_window=sync_window)
             st.session_state.last_returns_sync = sync_window
 
-    _render_data_sync_panel()
+    # Show only sync status
+    _render_sync_status_only()
 
-    if "returns_data" not in st.session_state or st.session_state.returns_data.empty:
-        st.info("📊 No Returns Data available. Check the source connection.")
-        return
 
-    df = st.session_state.returns_data.copy()
-
-    # ── Date Range Filter ──
-    df = _render_date_filter(df)
-
-    if df.empty:
-        st.warning("No returns data in the selected date range.")
-        return
-
-    # ── WooCommerce Gross Sales Link ──
-    sales_df = _get_gross_sales_context()
-
-    # ── Compute Metrics ──
-    metrics = calculate_net_sales_metrics(df, sales_df=sales_df)
-
-    # ── KPI Cards ──
-    _render_kpi_cards(metrics)
-
-    # ── Charts ──
-    st.markdown("---")
-    _render_charts(df, metrics)
-
-    # ── Detailed Table ──
-    st.markdown("---")
-    _render_details_table(df)
-
-    # ── Export ──
-    st.markdown("---")
-    _render_export(df, metrics)
+def _render_sync_status_only() -> None:
+    """Render minimal sync status (hidden detailed view)."""
+    with st.expander("🔗 Returns Data Sync Status", expanded=True):
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.text_input(
+                "Google Sheets CSV URL",
+                value=DEFAULT_SHEET_URL,
+                disabled=True,
+            )
+            last_sync = st.session_state.get('last_returns_sync', 'None')
+            st.caption(f"Last Auto-Sync Window: {last_sync}")
+            
+            # Show record count
+            if "returns_data" in st.session_state and not st.session_state.returns_data.empty:
+                df = st.session_state.returns_data
+                st.success(f"✅ {len(df)} returns records loaded")
+            else:
+                st.warning("📊 No returns data available")
+                
+        with c2:
+            if st.button("🔄 Force Refresh", use_container_width=True):
+                with st.spinner("Force syncing..."):
+                    load_returns_data.clear()
+                    sync_window = get_current_sync_window()
+                    df = load_returns_data(sync_window=sync_window)
+                    st.session_state.returns_data = df
+                    st.session_state.last_returns_sync = sync_window
+                    st.success(f"✅ Reloaded {len(df)} records")
+                    st.rerun()
+        
+        st.info("📊 Returns analytics are now integrated into the main dashboard view.")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -110,12 +105,35 @@ def _render_data_sync_panel() -> None:
 # ═══════════════════════════════════════════════════════════════════
 
 def _render_date_filter(df: pd.DataFrame) -> pd.DataFrame:
-    """Apply global date range filter and issue type filter."""
-    # Use global date range from sidebar
+    """Apply global date range filter mapping from Business Intelligence dashboard window."""
     today = date.today()
-    start = st.session_state.get("wc_sync_start_date", today - timedelta(days=30))
-    end = st.session_state.get("wc_sync_end_date", today)
-    
+    window = st.session_state.get("time_window", "Last Month")
+
+    start_dt = end_dt = today
+    if window == "MTD":
+        start_dt = today.replace(day=1)
+    elif window == "YTD":
+        start_dt = today.replace(month=1, day=1)
+    elif window == "Custom Date Range":
+        start_dt = st.session_state.get("wc_sync_start_date", today - timedelta(days=30))
+        end_dt = st.session_state.get("wc_sync_end_date", today)
+    else:
+        window_map = {
+            "Last Day": 1,
+            "Last 3 Days": 3,
+            "Last 4 Days": 4,
+            "Last 7 Days": 7,
+            "Last 15 Days": 15,
+            "Last Month": 30,
+            "Last 3 Months": 90,
+            "Last Quarter": 90,
+            "Last Half Year": 180,
+            "Last 9 Months": 270,
+            "Last Year": 365
+        }
+        days_back = window_map.get(window, 30)
+        start_dt = today - timedelta(days=days_back)
+
     # Issue type filter
     all_types = sorted(df["issue_type"].unique().tolist())
     selected_types = st.multiselect(
@@ -124,10 +142,10 @@ def _render_date_filter(df: pd.DataFrame) -> pd.DataFrame:
         key="returns_type_filter"
     )
     
-    # Show current date range
-    st.caption(f"📅 Using global date range: {start} to {end} (set in Business Intelligence sidebar)")
+    st.caption(f"📅 Using synchronized date range: **{start_dt}** to **{end_dt}** ({window})")
 
-    mask = (df["date"].dt.date >= start) & (df["date"].dt.date <= end)
+    # Filter dataframe
+    mask = (df["date"].dt.date >= start_dt) & (df["date"].dt.date <= end_dt)
     if selected_types:
         mask &= df["issue_type"].isin(selected_types)
 
