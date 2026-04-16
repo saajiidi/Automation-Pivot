@@ -306,6 +306,23 @@ def render_intelligence_hub_page():
 
     st.markdown("<br>", unsafe_allow_html=True)
     
+    # --- NET SALES FINANCIAL IMPACT ---
+    from BackEnd.services.returns_tracker import load_returns_data, get_current_sync_window, calculate_net_sales_metrics
+    sync_window = get_current_sync_window()
+    if "returns_data" not in st.session_state or st.session_state.get("last_returns_sync") != sync_window:
+        st.session_state.returns_data = load_returns_data(sync_window=sync_window)
+        st.session_state.last_returns_sync = sync_window
+        
+    net_metrics = calculate_net_sales_metrics(st.session_state.returns_data, sales_df=df_exec)
+    
+    st.markdown('<div class="sidebar-group-label" style="font-size:0.85rem; letter-spacing:1px;">💰 TRUE REVENUE & FINANCIAL IMPACT</div>', unsafe_allow_html=True)
+    nc1, nc2, nc3 = st.columns(3)
+    with nc1: ui.icon_metric("Gross Verified Revenue", f"৳{net_metrics.get('gross_sales', 0):,.0f}", icon="💎", delta="Active", delta_val=net_metrics.get('gross_sales', 0))
+    with nc2: ui.icon_metric("Loss (Returns + Partials)", f"৳{(net_metrics.get('return_value_extracted', 0) + net_metrics.get('partial_amounts', 0)):,.0f}", icon="📉", delta="Lost", delta_val=-(net_metrics.get('return_value_extracted', 0) + net_metrics.get('partial_amounts', 0)))
+    with nc3: ui.icon_metric("Net Settled Sales", f"৳{net_metrics.get('net_sales', 0):,.0f}", icon="🌟", delta="Net", delta_val=net_metrics.get('net_sales', 0))
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
 
     # Routing based on sidebar selection
     selection = st.session_state.get("active_section", "💎 Sales Overview")

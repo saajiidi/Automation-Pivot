@@ -166,36 +166,8 @@ def _get_gross_sales_context():
 def _render_kpi_cards(metrics: dict) -> None:
     """Render the executive KPI cards."""
 
-    # Row 1: Financial metrics
-    st.markdown("#### 💰 Financial Impact")
-    f_cols = st.columns(3)
-    
-    with f_cols[0]:
-        st.markdown(_kpi_card(
-            "💎 GROSS SALES",
-            f"৳{metrics.get('gross_sales', 0):,.0f}",
-            "From active WooCommerce orders",
-            "#10b981"
-        ), unsafe_allow_html=True)
-        
-    with f_cols[1]:
-        st.markdown(_kpi_card(
-            "🌟 NET SALES",
-            f"৳{metrics.get('net_sales', 0):,.0f}",
-            "Gross − (Returns + Partials)",
-            "#3b82f6"
-        ), unsafe_allow_html=True)
-
-    with f_cols[2]:
-        st.markdown(_kpi_card(
-            "📉 REVENUE LOST",
-            f"৳{metrics.get('return_value_extracted', 0) + metrics.get('partial_amounts', 0):,.0f}",
-            f"Returns: ৳{metrics.get('return_value_extracted', 0):,.0f} | Partials: ৳{metrics.get('partial_amounts', 0):,.0f}",
-            "#ef4444"
-        ), unsafe_allow_html=True)
-
-    st.markdown("#### 📦 Operational Metrics")
-    cols = st.columns(5)
+    st.markdown("#### 📦 Operational Returns Metrics")
+    cols = st.columns(4)
 
     with cols[0]:
         st.markdown(_kpi_card(
@@ -216,7 +188,7 @@ def _render_kpi_cards(metrics: dict) -> None:
 
     with cols[2]:
         st.markdown(_kpi_card(
-            "🟡 PARTIAL",
+            "🟡 PARTIALS",
             f"{metrics['partial_count']:,}",
             f"৳{metrics['partial_amounts']:,.0f} extracted",
             "#eab308"
@@ -230,14 +202,6 @@ def _render_kpi_cards(metrics: dict) -> None:
             "#8b5cf6"
         ), unsafe_allow_html=True)
 
-    with cols[4]:
-        st.markdown(_kpi_card(
-            "📊 RETURN RATE",
-            f"{metrics.get('return_rate', 0):.1f}%",
-            f"of {metrics.get('total_orders', 0):,} total orders"
-            if metrics.get("total_orders") else "Sync BI data for rate",
-            "#f97316"
-        ), unsafe_allow_html=True)
 
 
 def _kpi_card(label: str, value: str, subtitle: str, color: str) -> str:
@@ -341,8 +305,28 @@ def _render_monthly_trend(df: pd.DataFrame) -> None:
         line=dict(color="#3b82f6", width=3),
         marker=dict(size=8),
     ))
+    
+    # Also add Net Returns value if available (just count of actual returns)
+    return_mask = df["issue_type"].isin(["Paid Return", "Non Paid Return"])
+    return_monthly = (
+        df[return_mask].drop_duplicates(subset=["order_id"])
+        .groupby(pd.Grouper(key="date", freq="ME"))
+        .size()
+        .reset_index(name="return_issues")
+    )
+    if not return_monthly.empty:
+        return_monthly["month_label"] = return_monthly["date"].dt.strftime("%b %Y")
+        fig2.add_trace(go.Scatter(
+            x=return_monthly["month_label"],
+            y=return_monthly["return_issues"],
+            mode="lines+markers",
+            name="True Returns",
+            line=dict(color="#ef4444", width=3, dash="dot"),
+            marker=dict(size=8),
+        ))
+
     fig2.update_layout(
-        title="Total Issues Over Time",
+        title="Issue Velocity Over Time",
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Inter, sans-serif"),
