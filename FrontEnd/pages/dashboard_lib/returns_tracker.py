@@ -57,10 +57,10 @@ def render_returns_tracker_page() -> None:
         return
 
     # ── WooCommerce Gross Sales Link ──
-    gross_sales, total_orders = _get_gross_sales_context()
+    sales_df = _get_gross_sales_context()
 
     # ── Compute Metrics ──
-    metrics = calculate_net_sales_metrics(df, gross_sales, total_orders)
+    metrics = calculate_net_sales_metrics(df, sales_df=sales_df)
 
     # ── KPI Cards ──
     _render_kpi_cards(metrics)
@@ -149,20 +149,14 @@ def _render_date_filter(df: pd.DataFrame) -> pd.DataFrame:
 # ═══════════════════════════════════════════════════════════════════
 
 def _get_gross_sales_context():
-    """Try to pull gross sales from the existing dashboard data."""
-    gross_sales = 0.0
-    total_orders = 0
+    """Try to pull active sales df from the existing dashboard data."""
+    sales_df = pd.DataFrame()
 
     if "dashboard_data" in st.session_state:
         data = st.session_state.dashboard_data
         sales_df = data.get("sales_active", pd.DataFrame())
-        if not sales_df.empty:
-            if "item_revenue" in sales_df.columns:
-                gross_sales = sales_df["item_revenue"].sum()
-            if "order_id" in sales_df.columns:
-                total_orders = sales_df["order_id"].nunique()
 
-    return gross_sales, total_orders
+    return sales_df
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -172,7 +166,35 @@ def _get_gross_sales_context():
 def _render_kpi_cards(metrics: dict) -> None:
     """Render the executive KPI cards."""
 
-    # Row 1: Primary metrics
+    # Row 1: Financial metrics
+    st.markdown("#### 💰 Financial Impact")
+    f_cols = st.columns(3)
+    
+    with f_cols[0]:
+        st.markdown(_kpi_card(
+            "💎 GROSS SALES",
+            f"৳{metrics.get('gross_sales', 0):,.0f}",
+            "From active WooCommerce orders",
+            "#10b981"
+        ), unsafe_allow_html=True)
+        
+    with f_cols[1]:
+        st.markdown(_kpi_card(
+            "🌟 NET SALES",
+            f"৳{metrics.get('net_sales', 0):,.0f}",
+            "Gross − (Returns + Partials)",
+            "#3b82f6"
+        ), unsafe_allow_html=True)
+
+    with f_cols[2]:
+        st.markdown(_kpi_card(
+            "📉 REVENUE LOST",
+            f"৳{metrics.get('return_value_extracted', 0) + metrics.get('partial_amounts', 0):,.0f}",
+            f"Returns: ৳{metrics.get('return_value_extracted', 0):,.0f} | Partials: ৳{metrics.get('partial_amounts', 0):,.0f}",
+            "#ef4444"
+        ), unsafe_allow_html=True)
+
+    st.markdown("#### 📦 Operational Metrics")
     cols = st.columns(5)
 
     with cols[0]:

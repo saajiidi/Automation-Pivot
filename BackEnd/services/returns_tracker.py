@@ -280,15 +280,13 @@ def _extract_partial_amount(details: str) -> float:
 
 def calculate_net_sales_metrics(
     returns_df: pd.DataFrame,
-    gross_sales: Optional[float] = None,
-    total_orders: Optional[int] = None,
+    sales_df: Optional[pd.DataFrame] = None,
 ) -> Dict[str, Any]:
     """Calculate comprehensive net sales metrics.
 
     Args:
         returns_df: Classified returns DataFrame.
-        gross_sales: Total gross sales from WooCommerce (if available).
-        total_orders: Total order count from WooCommerce (if available).
+        sales_df: WooCommerce active sales DataFrame to calculate precise values.
 
     Returns:
         Dictionary of computed KPIs.
@@ -299,13 +297,33 @@ def calculate_net_sales_metrics(
             "return_count": 0, "return_partial_amounts": 0,
             "partial_count": 0, "partial_amounts": 0,
             "exchange_count": 0,
-            "refund_count": 0,
-            "cancel_count": 0,
-            "items_lost_count": 0,
-            "delivery_issue_count": 0,
-            "gross_sales": gross_sales or 0,
-            "total_orders": total_orders or 0,
+            "gross_sales": 0.0,
+            "total_orders": 0,
+            "return_value_extracted": 0.0,
+            "net_sales": 0.0,
         }
+
+    gross_sales = 0.0
+    total_orders = 0
+    return_value = 0.0
+
+    if sales_df is not None and not sales_df.empty:
+        if "item_revenue" in sales_df.columns:
+            gross_sales = pd.to_numeric(sales_df["item_revenue"], errors="coerce").sum()
+        if "order_id" in sales_df.columns:
+            total_orders = sales_df["order_id"].nunique()
+            
+            # Map returns to WooCommerce to extract full return value
+            return_orders = returns_df[returns_df["issue_type"].isin(["Paid Return", "Non Paid Return"])]["order_id"].unique()
+            sales_unique = sales_df.drop_duplicates(subset=["order_id"]).copy()
+            sales_unique["str_id"] = sales_unique["order_id"].astype(str)
+            
+            matched = sales_unique[sales_unique["str_id"].isin(return_orders)]
+            if "order_total" in matched.columns:
+                return_value = pd.to_numeric(matched["order_total"], errors="coerce").sum()
+            elif "item_revenue" in sales_df.columns:
+                matched_items = sales_df[sales_df["order_id"].astype(str).isin(return_orders)]
+                return_value = pd.to_numeric(matched_items["item_revenue"], errors="coerce").sum()
 
     # Deduplicate by normalized order_id for counting unique orders
     unique_orders = returns_df.drop_duplicates(subset=["order_id"])
@@ -365,8 +383,10 @@ def calculate_net_sales_metrics(
         "reason_counts": reason_counts,
         "monthly_trend": monthly,
         "monthly_by_type": monthly_by_type,
-        "gross_sales": gross_sales or 0,
-        "total_orders": total_orders or 0,
+        "gross_sales": gross_sales,
+        "total_orders": total_orders,
+        "return_value_extracted": return_value,
+        "net_sales": max(0.0, gross_sales - return_value - partial_amounts),
     }
 
     # ── Return rate ──
