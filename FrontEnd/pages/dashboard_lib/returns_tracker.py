@@ -15,6 +15,7 @@ import plotly.graph_objects as go
 
 from BackEnd.services.returns_tracker import (
     load_returns_data,
+    get_current_sync_window,
     calculate_net_sales_metrics,
     get_issue_type_color,
     DEFAULT_SHEET_URL,
@@ -33,14 +34,17 @@ def render_returns_tracker_page() -> None:
         "Calculate Net Sales from delivery-issue intelligence."
     )
 
-    # ── Data Sync ──
+    # ── Auto Data Sync ──
+    sync_window = get_current_sync_window()
+    if "returns_data" not in st.session_state or st.session_state.get("last_returns_sync") != sync_window:
+        with st.spinner("Syncing delivery-issue data (Scheduled)..."):
+            st.session_state.returns_data = load_returns_data(sync_window=sync_window)
+            st.session_state.last_returns_sync = sync_window
+
     _render_data_sync_panel()
 
     if "returns_data" not in st.session_state or st.session_state.returns_data.empty:
-        st.info(
-            "📊 Click **Sync Returns Data** above to load delivery-issue data "
-            "from Google Sheets."
-        )
+        st.info("📊 No Returns Data available. Check the source connection.")
         return
 
     df = st.session_state.returns_data.copy()
@@ -80,39 +84,24 @@ def render_returns_tracker_page() -> None:
 
 def _render_data_sync_panel() -> None:
     """Render the data sync controls."""
-    with st.expander("🔗 Data Source", expanded=False):
+    with st.expander("🔗 Data Source & Sync Status", expanded=False):
         c1, c2 = st.columns([3, 1])
         with c1:
             st.text_input(
                 "Google Sheets CSV URL",
                 value=DEFAULT_SHEET_URL,
-                key="returns_sheet_url",
-                label_visibility="collapsed",
                 disabled=True,
             )
+            st.caption(f"Last Auto-Sync Window: {st.session_state.get('last_returns_sync', 'None')}")
         with c2:
-            if st.button("🔄 Sync Returns Data", type="primary", use_container_width=True):
-                with st.spinner("Syncing delivery-issue data..."):
-                    df = load_returns_data(url=st.session_state.get("returns_sheet_url"))
-                    if not df.empty:
-                        st.session_state.returns_data = df
-                        st.success(f"✅ Loaded {len(df)} delivery-issue records")
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to load data. Check the URL.")
-
-        # Optional file upload
-        uploaded = st.file_uploader(
-            "Or upload CSV/Excel",
-            type=["csv", "xlsx"],
-            key="returns_upload",
-        )
-        if uploaded is not None:
-            with st.spinner("Processing upload..."):
-                df = load_returns_data(uploaded_file=uploaded)
-                if not df.empty:
+            if st.button("🔄 Force Refresh Now", use_container_width=True):
+                with st.spinner("Force syncing delivery-issue data..."):
+                    load_returns_data.clear()
+                    sync_window = get_current_sync_window()
+                    df = load_returns_data(sync_window=sync_window)
                     st.session_state.returns_data = df
-                    st.success(f"✅ Loaded {len(df)} records from upload")
+                    st.session_state.last_returns_sync = sync_window
+                    st.success(f"✅ Reloaded {len(df)} records")
                     st.rerun()
 
 
@@ -142,14 +131,9 @@ def _render_date_filter(df: pd.DataFrame) -> pd.DataFrame:
     with c3:
         # Issue type filter
         all_types = sorted(df["issue_type"].unique().tolist())
-        # Default: show actionable types
-        default_types = [
-            t for t in all_types
-            if t not in ("Delivered", "Unknown", "Delivery Issue")
-        ]
         selected_types = st.multiselect(
             "Issue Types", all_types,
-            default=default_types,
+            default=all_types,
             key="returns_type_filter"
         )
 
@@ -231,40 +215,6 @@ def _render_kpi_cards(metrics: dict) -> None:
             f"of {metrics.get('total_orders', 0):,} total orders"
             if metrics.get("total_orders") else "Sync BI data for rate",
             "#f97316"
-        ), unsafe_allow_html=True)
-
-    # Row 2: Secondary
-    cols2 = st.columns(4)
-    with cols2[0]:
-        st.markdown(_kpi_card(
-            "💵 REFUNDS",
-            f"{metrics['refund_count']:,}",
-            "QC / OOS refunds",
-            "#ec4899"
-        ), unsafe_allow_html=True)
-
-    with cols2[1]:
-        st.markdown(_kpi_card(
-            "🚫 CANCELS",
-            f"{metrics['cancel_count']:,}",
-            "Customer-initiated",
-            "#6b7280"
-        ), unsafe_allow_html=True)
-
-    with cols2[2]:
-        st.markdown(_kpi_card(
-            "📦 ITEMS LOST",
-            f"{metrics['items_lost_count']:,}",
-            "In transit",
-            "#dc2626"
-        ), unsafe_allow_html=True)
-
-    with cols2[3]:
-        st.markdown(_kpi_card(
-            "⚠️ DELIVERY ISSUES",
-            f"{metrics['delivery_issue_count']:,}",
-            "Courier problems",
-            "#f59e0b"
         ), unsafe_allow_html=True)
 
 
@@ -610,13 +560,9 @@ def _generate_excel_report(df: pd.DataFrame, metrics: dict) -> bytes:
                 "  └─ Non-Paid Returns",
                 "Partial Orders",
                 "Exchanges",
-                "Refunds",
-                "Cancellations",
-                "Items Lost",
-                "Delivery Issues",
                 "",
                 "Return Rate (%)",
-                "Partial Amounts Extracted (৳)",
+                "Partial Amounts (৳)",
             ],
             "Value": [
                 metrics["total_issues"],
@@ -625,10 +571,6 @@ def _generate_excel_report(df: pd.DataFrame, metrics: dict) -> bytes:
                 metrics.get("non_paid_return_count", 0),
                 metrics["partial_count"],
                 metrics["exchange_count"],
-                metrics["refund_count"],
-                metrics["cancel_count"],
-                metrics["items_lost_count"],
-                metrics["delivery_issue_count"],
                 "",
                 metrics.get("return_rate", 0),
                 metrics["partial_amounts"],

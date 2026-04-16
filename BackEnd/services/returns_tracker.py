@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 
 import pandas as pd
+import streamlit as st
 
 from BackEnd.core.logging_config import get_logger
 
@@ -54,9 +55,23 @@ RETURN_REASON_CATEGORIES = {
 }
 
 
+def get_current_sync_window() -> str:
+    """Return an identifier for the current sync window (10:30 AM or 4:30 PM)."""
+    now = datetime.now()
+    t_1030 = now.replace(hour=10, minute=30, second=0, microsecond=0)
+    t_1630 = now.replace(hour=16, minute=30, second=0, microsecond=0)
+    
+    if now < t_1030:
+        return f"{(now.date() - pd.Timedelta(days=1)).isoformat()}_16:30"
+    elif now < t_1630:
+        return f"{now.date().isoformat()}_10:30"
+    else:
+        return f"{now.date().isoformat()}_16:30"
+
+@st.cache_data(show_spinner=False, max_entries=2)
 def load_returns_data(
     url: Optional[str] = None,
-    uploaded_file=None,
+    sync_window: str = "",
 ) -> pd.DataFrame:
     """Load and clean returns/delivery-issue data.
 
@@ -68,11 +83,8 @@ def load_returns_data(
         Cleaned DataFrame with standardized columns.
     """
     try:
-        if uploaded_file is not None:
-            df = pd.read_csv(uploaded_file)
-        else:
-            source = url or DEFAULT_SHEET_URL
-            df = pd.read_csv(source)
+        source = url or DEFAULT_SHEET_URL
+        df = pd.read_csv(source)
 
         logger.info(f"Loaded {len(df)} rows from returns data source")
     except Exception as e:
@@ -132,6 +144,10 @@ def load_returns_data(
 
     # ── Extract partial amount (if embedded in product_details) ──
     df["partial_amount"] = df["product_details"].apply(_extract_partial_amount)
+
+    # ── Keep ONLY Paid Return, Non Paid Return, Partial, Exchange ──
+    allowed_types = ["Paid Return", "Non Paid Return", "Partial", "Exchange"]
+    df = df[df["issue_type"].isin(allowed_types)].copy()
 
     # ── Drop rows with no valid date ──
     df = df.dropna(subset=["date"])
@@ -298,15 +314,10 @@ def calculate_net_sales_metrics(
     return_mask = unique_orders["issue_type"].isin(["Paid Return", "Non Paid Return"])
     partial_mask = unique_orders["issue_type"] == "Partial"
     exchange_mask = unique_orders["issue_type"] == "Exchange"
-    refund_mask = unique_orders["issue_type"] == "Refund"
-    cancel_mask = unique_orders["issue_type"] == "Cancel"
-    lost_mask = unique_orders["issue_type"] == "Items Lost"
-    delivery_mask = unique_orders["issue_type"] == "Delivery Issue"
 
     return_count = return_mask.sum()
     partial_count = partial_mask.sum()
     exchange_count = exchange_mask.sum()
-    refund_count = refund_mask.sum()
 
     # ── Partial amounts (extracted from text) ──
     partial_amounts = returns_df.loc[
@@ -351,10 +362,6 @@ def calculate_net_sales_metrics(
         "partial_count": int(partial_count),
         "partial_amounts": float(partial_amounts),
         "exchange_count": int(exchange_count),
-        "refund_count": int(refund_count),
-        "cancel_count": int(cancel_mask.sum()),
-        "items_lost_count": int(lost_mask.sum()),
-        "delivery_issue_count": int(delivery_mask.sum()),
         "reason_counts": reason_counts,
         "monthly_trend": monthly,
         "monthly_by_type": monthly_by_type,

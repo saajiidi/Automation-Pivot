@@ -56,23 +56,6 @@ DASHBOARD_SALES_COLUMNS = [
 def render_intelligence_hub_page():
     st.markdown('<div class="live-indicator"><span class="live-dot"></span>System Online | Intelligence Hub Active</div>', unsafe_allow_html=True)
     
-    # 0. Global Strategy Filters (Sidebar)
-    with st.sidebar:
-        st.markdown('<div class="sidebar-group-label">🎯 Strategy Filters</div>', unsafe_allow_html=True)
-        
-        # Load available filters from session data if exists, else defaults
-        avail_cats = ["All"]
-        avail_stats = ["All"]
-        if "dashboard_data" in st.session_state:
-            from .dashboard_lib.data_helpers import get_available_filters
-            avail_cats_raw, avail_stats_raw = get_available_filters(st.session_state.dashboard_data["sales"])
-            avail_cats = ["All"] + avail_cats_raw
-            avail_stats = ["All"] + avail_stats_raw
-        
-        st.multiselect("Categories", avail_cats, default=["All"], key="global_categories", format_func=format_category_label)
-        st.multiselect("Order Status", avail_stats, default=["All"], key="global_statuses")
-        st.divider()
-
     global_sync = st.session_state.get("global_sync_request", False)
     if global_sync:
         st.session_state["global_sync_request"] = False # Reset
