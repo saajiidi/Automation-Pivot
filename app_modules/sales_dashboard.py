@@ -71,7 +71,7 @@ def render_category_intelligence(df_sales: pd.DataFrame):
     
     # Safety Check: Inherit expert rules if column missing (e.g. from cache)
     if "Category" not in df_sales.columns:
-        from BackEnd.utils.category_rules import apply_category_expert_rules
+        from BackEnd.core.categories import apply_category_expert_rules
         # Use semantic mapping to find item name
         name_col = "item_name" if "item_name" in df_sales.columns else "Product Name"
         if name_col in df_sales.columns:

@@ -95,7 +95,7 @@ def ensure_sales_schema(df: pd.DataFrame) -> pd.DataFrame:
         + out["order_total"].round(2).astype(str)
     )
 
-    from BackEnd.utils.category_rules import apply_category_expert_rules
+    from BackEnd.core.categories import apply_category_expert_rules
     out = apply_category_expert_rules(out, name_col="item_name")
 
     return out

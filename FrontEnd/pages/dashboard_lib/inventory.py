@@ -72,10 +72,15 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
     
     with f_c1:
         raw_cats = list(inventory["Category"].dropna().unique())
-        # Ensure parent categories exist if children do
-        for parent in ["Jeans", "T-Shirt"]:
-            if any(str(c).startswith(f"{parent} - ") for c in raw_cats) and parent not in raw_cats:
-                raw_cats.append(parent)
+        # Ensure parent categories exist if children do (Generalized Parent Detection)
+        parents_to_add = set()
+        for cat in raw_cats:
+            if " - " in str(cat):
+                parent = str(cat).split(" - ")[0]
+                if parent not in raw_cats:
+                    parents_to_add.add(parent)
+        
+        raw_cats = list(set(raw_cats).union(parents_to_add))
             
         cat_list = sort_categories([str(c) for c in raw_cats if str(c).strip()])
         sel_cat = st.selectbox("Category", ["All"] + cat_list, index=0, key="sniper_cat_select", format_func=format_category_label)

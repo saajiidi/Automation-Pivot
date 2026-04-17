@@ -4,19 +4,20 @@ CATEGORY_MAPPING = {
     'Boxer': ['boxer'],
     'Tank Top': ['tank top', 'tanktop', 'tank', 'top'],
     'Jeans': ['jeans'],
-    'Denim Shirt': ['denim'],
-    'Flannel Shirt': ['flannel'],
+    'FS Shirt - Denim Shirt': ['denim'],
+    'FS Shirt - Flannel Shirt': ['flannel'],
+    'FS Shirt - Oxford Shirt': ['oxford'],
     'Polo Shirt': ['polo'],
     'Panjabi': ['panjabi', 'punjabi'],
     'Trousers': ['trousers', 'pant', 'cargo', 'trouser', 'joggers', 'track pant', 'jogger'],
     'Twill Chino': ['twill chino'],
     'Mask': ['mask'],
     'Water Bottle': ['water bottle'],
-    'Contrast Shirt': ['contrast'],
+    'HS Shirt - Contrast Shirt': ['contrast'],
     'Turtleneck': ['turtleneck', 'mock neck'],
     'Drop Shoulder': ['drop', 'shoulder'],
     'Wallet': ['wallet'],
-    'Kaftan Shirt': ['kaftan'],
+    'FS Shirt - Kaftan Shirt': ['kaftan'],
     'Active Wear': ['active wear'],
     'Jersy': ['jersy'],
     'Sweatshirt': ['sweatshirt', 'hoodie', 'pullover'],
@@ -50,9 +51,9 @@ def get_product_category(name: str) -> str:
     is_fs = any(kw in name_str for kw in fs_keywords)
     
     if any(kw in name_str for kw in ['t-shirt', 't shirt', 'tee']):
-        return 'FS T-Shirt' if is_fs else 'T-Shirt'
+        return 'T-Shirt - FS T-Shirt' if is_fs else 'T-Shirt - HS T-Shirt'
     if 'shirt' in name_str:
-        return 'FS Shirt' if is_fs else 'HS Shirt'
+        return 'FS Shirt' if is_fs else 'HS Shirt - HS Casual Shirt'
         
     return 'Others'
 

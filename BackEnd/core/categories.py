@@ -1,4 +1,6 @@
 import re
+import pandas as pd
+
 
 def _normalize(value) -> str:
     return str(value or "").strip().lower()
@@ -10,62 +12,22 @@ def _has_any(keywords, text):
     )
 
 def get_category_for_orders(name) -> str:
-    """Old order categorization (maintained for backward compatibility if needed)."""
-    text = _normalize(name)
-    if not text:
-        return "Items"
-
-    order_rules = [
-        ("Boxer", ["boxer"]),
-        ("Jeans", ["jeans"]),
-        ("Denim", ["denim"]),
-        ("Flannel", ["flannel"]),
-        ("Polo", ["polo"]),
-        ("Panjabi", ["panjabi"]),
-        ("Trousers", ["trouser"]),
-        ("Twill", ["twill", "chino"]),
-        ("Sweatshirt", ["sweatshirt"]),
-        ("Tank Top", ["tank top"]),
-        ("Pants", ["gabardine", "pant"]),
-        ("Contrast Shirt", ["contrast"]),
-        ("Turtleneck", ["turtleneck"]),
-        ("Wallet", ["wallet"]),
-        ("Kaftan", ["kaftan"]),
-        ("Active", ["active"]),
-        ("1 Pack Mask", ["mask"]),
-        ("Bag", ["bag"]),
-        ("Bottle", ["bottle"]),
-    ]
-
-    for label, keywords in order_rules:
-        if _has_any(keywords, text):
-            return label
-
-    fs_keywords = ["full sleeve"]
-    if _has_any(["t-shirt", "t shirt"], text):
-        return "FS T-Shirt" if any(kw in text for kw in fs_keywords) else "HS T-Shirt"
-
-    if "shirt" in text:
-        return "FS Shirt" if any(kw in text for kw in fs_keywords) else "HS Shirt"
-
-    words = text.split()
-    if len(words) >= 2:
-        return f"{words[0].title()} {words[1].title()}"
-    return "Items"
+    """Redirect to the unified hierarchical categorization logic."""
+    return get_category_for_sales(name)
 
 # Master Category Priority (Determines the 'Flow' in UI Dropdowns)
 CATEGORIES_PRIORITY = [
     "Jeans", "Jeans - Regular Fit", "Jeans - Slim Fit", "Jeans - Straight Fit",
     "T-Shirt", "T-Shirt - HS T-Shirt", "T-Shirt - FS T-Shirt", "T-Shirt - Drop Shoulder", "T-Shirt - Tank Top", "T-Shirt - Active Wear", "T-Shirt - Jersey",
     "FS Shirt", "FS Shirt - Flannel Shirt", "FS Shirt - Denim Shirt", "FS Shirt - Oxford Shirt", "FS Shirt - Kaftan Shirt", "FS Shirt - FS Casual Shirt",
-    "HS Shirt", "HS Shirt - Contrast Stitch Shirt", "HS Shirt - HS Casual Shirt",
+    "HS Shirt", "HS Shirt - Contrast Shirt", "HS Shirt - HS Casual Shirt",
     "Wallet", "Wallet - Passport Holder", "Wallet - Card Holder", "Wallet - Long Wallet", "Wallet - Bifold Wallet", "Wallet - Trifold Wallet",
     "Panjabi", "Panjabi - Panjabi", "Panjabi - Old Panjabi",
     "Sweatshirt", "Sweatshirt - Cotton Terry Sweatshirt", "Sweatshirt - French Terry Sweatshirt",
     "Polo Shirt", "Turtle-Neck",
     "Twill Chino", "Twill Chino - Twill Chino Pant", "Twill Chino - Twill Joggers", "Twill Chino - Five Pockets",
     "Trousers", "Trousers - Trousers", "Trousers - Joggers", "Trousers - Cotton Trousers",
-    "Boxer", "Leather Bag", "Belt", "Mask", "Water Bottle", "Bundles", "Others"
+    "Boxer", "Leather Bag", "Belt", "Jacket", "Sweater", "Cap", "Mask", "Water Bottle", "Bundles", "Others"
 ]
 
 def format_category_label(cat: str) -> str:
@@ -157,8 +119,11 @@ def get_category_for_sales(name) -> str:
         return "T-Shirt - HS T-Shirt"
 
     # FS Shirt
-    fs_keywords = ["full sleeve", "long sleeve", "fs", "l/s"]
-    if _has_any(["shirt"], name_str) and _has_any(fs_keywords, name_str):
+    fs_keywords = ["full sleeve", "long sleeve", "fs", "l/s", "full-sleeve"]
+    is_shirt = _has_any(["shirt"], name_str)
+    
+    # Force certain types into FS Shirt even if 'full sleeve' is missing
+    if is_shirt and (_has_any(fs_keywords, name_str) or _has_any(["flannel", "denim", "oxford"], name_str)):
         if _has_any(["flannel"], name_str): return "FS Shirt - Flannel Shirt"
         if _has_any(["denim"], name_str): return "FS Shirt - Denim Shirt"
         if _has_any(["oxford"], name_str): return "FS Shirt - Oxford Shirt"
@@ -167,9 +132,9 @@ def get_category_for_sales(name) -> str:
         return "FS Shirt"
 
     # HS Shirt
-    if _has_any(["shirt"], name_str):
-        if _has_any(["contrast", "stitch"], name_str): return "HS Shirt - Contrast Stitch Shirt"
-        if _has_any(["casual"], name_str): return "HS Shirt - HS Casual Shirt"
+    if is_shirt:
+        if _has_any(["contrast", "stitch"], name_str): return "HS Shirt - Contrast Shirt"
+        if _has_any(["half sleeve", "hs", "casual"], name_str): return "HS Shirt - HS Casual Shirt"
         return "HS Shirt"
 
     # Wallet
@@ -212,6 +177,9 @@ def get_category_for_sales(name) -> str:
         "Mask": ["mask"],
         "Water Bottle": ["bottle"],
         "Belt": ["belt"],
+        "Jacket": ["jacket", "outerwear", "coat"],
+        "Sweater": ["sweater", "cardigan", "knitwear"],
+        "Cap": ["cap"],
     }
 
     for cat, keywords in specific_cats.items():
@@ -288,3 +256,27 @@ def get_clean_product_name(name):
             return parts[0]
             
     return clean.strip("- ")
+
+def apply_category_expert_rules(df: pd.DataFrame, name_col: str = "item_name") -> pd.DataFrame:
+    """
+    Modular application of categorization rules to a DataFrame.
+    Resilient to missing name columns.
+    """
+    if df is None or df.empty:
+        return df
+        
+    # Standardize column search
+    target_col = name_col
+    if target_col not in df.columns:
+        # Check standard aliases if name_col is missing
+        aliases = ["item_name", "Product Name", "Product", "Item", "item"]
+        for alias in aliases:
+            if alias in df.columns:
+                target_col = alias
+                break
+        else:
+            return df
+            
+    df['Category'] = df[target_col].apply(get_category_for_sales)
+    return df
+
