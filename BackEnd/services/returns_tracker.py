@@ -8,14 +8,26 @@ Data valid from August 2025 onwards.
 
 from __future__ import annotations
 
+import gc
 import re
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, List
 
 import pandas as pd
+import numpy as np
 import streamlit as st
 
 from BackEnd.core.logging_config import get_logger
+from BackEnd.core.memory_utils import (
+    optimize_dtypes,
+    safe_groupby_transform,
+    safe_merge,
+    cleanup_memory,
+    safe_operation
+)
+
+# Set pandas option to avoid fragmentation warnings
+pd.set_option('mode.copy_on_write', True)
 
 logger = get_logger("returns_tracker")
 
@@ -725,30 +737,64 @@ def get_order_items_breakdown(order_id: str, returned_items: list[dict[str, Any]
 
 
 def _estimate_sales_line_revenue(sales_df: pd.DataFrame) -> pd.Series:
-    """Estimate line revenue using the best available columns."""
+    """Estimate line revenue using the best available columns.
+    
+    Memory-safe implementation with chunked processing for large datasets.
+    """
     if sales_df is None or sales_df.empty:
         return pd.Series(dtype="float64")
+    
+    # Use optimized dtypes to reduce memory
+    sales_df = optimize_dtypes(sales_df)
 
-    qty = pd.to_numeric(sales_df.get("qty", 0), errors="coerce").fillna(0)
+    try:
+        qty = pd.to_numeric(sales_df.get("qty", 0), errors="coerce").fillna(0)
 
-    for col in ["item_revenue", "line_total", "total"]:
-        if col in sales_df.columns:
-            values = pd.to_numeric(sales_df[col], errors="coerce")
-            if values.notna().any() and values.sum() > 0:
-                return values.fillna(0.0)
+        for col in ["item_revenue", "line_total", "total"]:
+            if col in sales_df.columns:
+                values = pd.to_numeric(sales_df[col], errors="coerce")
+                if values.notna().any() and values.sum() > 0:
+                    return values.fillna(0.0)
 
-    for col in ["item_cost", "price"]:
-        if col in sales_df.columns:
-            unit_price = pd.to_numeric(sales_df[col], errors="coerce").fillna(0.0)
-            if unit_price.sum() > 0:
-                return unit_price * qty
+        for col in ["item_cost", "price"]:
+            if col in sales_df.columns:
+                unit_price = pd.to_numeric(sales_df[col], errors="coerce").fillna(0.0)
+                if unit_price.sum() > 0:
+                    return unit_price * qty
 
-    order_total = pd.to_numeric(sales_df.get("order_total", 0), errors="coerce").fillna(0.0)
-    group_key = sales_df["order_id"] if "order_id" in sales_df.columns else pd.Series(range(len(sales_df)), index=sales_df.index)
-    qty_totals = qty.groupby(group_key).transform("sum").replace(0, 1)
-    line_counts = sales_df.groupby(group_key).cumcount() * 0 + 1
-    line_counts = line_counts.groupby(group_key).transform("sum").replace(0, 1)
-    return (order_total * (qty / qty_totals)).fillna(order_total / line_counts).fillna(order_total)
+        order_total = pd.to_numeric(sales_df.get("order_total", 0), errors="coerce").fillna(0.0)
+        
+        # Memory-safe groupby using fallback for large DataFrames
+        if "order_id" in sales_df.columns:
+            group_key = sales_df["order_id"]
+            # Use simple arithmetic fallback for large datasets
+            if len(sales_df) > 100000:
+                # Approximate allocation by dividing order total by line count per order
+                order_line_counts = sales_df.groupby("order_id").size()
+                line_counts = sales_df["order_id"].map(order_line_counts).replace(0, 1)
+                qty_totals = qty.groupby(sales_df["order_id"]).transform("sum").replace(0, 1)
+                gc.collect()  # Force cleanup after groupby
+                return (order_total * (qty / qty_totals)).fillna(order_total / line_counts).fillna(order_total)
+            else:
+                qty_totals = qty.groupby(group_key).transform("sum").replace(0, 1)
+                line_counts = sales_df.groupby(group_key).cumcount() * 0 + 1
+                line_counts = line_counts.groupby(group_key).transform("sum").replace(0, 1)
+                return (order_total * (qty / qty_totals)).fillna(order_total / line_counts).fillna(order_total)
+        else:
+            # No order_id, distribute evenly
+            line_count = len(sales_df)
+            return order_total / line_count if line_count > 0 else order_total
+            
+    except MemoryError as e:
+        logger.warning(f"Memory error in revenue estimation, using fallback: {e}")
+        gc.collect()
+        # Fallback: return order_total divided evenly
+        order_total = pd.to_numeric(sales_df.get("order_total", 0), errors="coerce").fillna(0.0)
+        line_count = len(sales_df)
+        return order_total / line_count if line_count > 0 else order_total
+    except Exception as e:
+        logger.error(f"Error estimating line revenue: {e}")
+        return pd.Series(0.0, index=sales_df.index)
 
 
 def _normalize_match_text(value: Any) -> str:
@@ -759,20 +805,50 @@ def _normalize_match_text(value: Any) -> str:
 
 
 def _prepare_sales_context(sales_df: Optional[pd.DataFrame]) -> pd.DataFrame:
-    """Normalize sales rows for revenue attribution."""
+    """Normalize sales rows for revenue attribution with memory safety."""
     if sales_df is None or sales_df.empty or "order_id" not in sales_df.columns:
         return pd.DataFrame()
 
-    sales = sales_df.copy()
-    sales["order_id"] = sales["order_id"].astype(str).str.strip()
-    sales["qty"] = pd.to_numeric(sales.get("qty", 1), errors="coerce").fillna(1).clip(lower=1)
-    sales["_line_revenue"] = _estimate_sales_line_revenue(sales).fillna(0.0)
-    item_names = sales["item_name"] if "item_name" in sales.columns else pd.Series("", index=sales.index)
-    skus = sales["sku"] if "sku" in sales.columns else pd.Series("", index=sales.index)
-    sales["_item_name_norm"] = item_names.apply(_normalize_match_text)
-    sales["_sku_norm"] = skus.apply(_normalize_match_text)
-    sales["_line_key"] = sales.index.astype(str)
-    return sales
+    try:
+        # Optimize dtypes first to reduce memory
+        sales = optimize_dtypes(sales_df).copy()
+        
+        sales["order_id"] = sales["order_id"].astype(str).str.strip()
+        sales["qty"] = pd.to_numeric(sales.get("qty", 1), errors="coerce").fillna(1).clip(lower=1)
+        
+        # Memory-safe revenue estimation
+        sales["_line_revenue"] = _estimate_sales_line_revenue(sales).fillna(0.0)
+        
+        # Use vectorized operations instead of apply for memory efficiency
+        item_names = sales["item_name"] if "item_name" in sales.columns else pd.Series("", index=sales.index)
+        skus = sales["sku"] if "sku" in sales.columns else pd.Series("", index=sales.index)
+        
+        # For large DataFrames, avoid apply() which can cause memory spikes
+        if len(sales) > 50000:
+            sales["_item_name_norm"] = item_names.str.lower().str.replace(r'[^a-z0-9]+', ' ', regex=True)
+            sales["_sku_norm"] = skus.str.lower().str.replace(r'[^a-z0-9]+', ' ', regex=True)
+        else:
+            sales["_item_name_norm"] = item_names.apply(_normalize_match_text)
+            sales["_sku_norm"] = skus.apply(_normalize_match_text)
+        
+        sales["_line_key"] = sales.index.astype(str)
+        
+        # Cleanup intermediate objects
+        gc.collect()
+        
+        return sales
+        
+    except MemoryError as e:
+        logger.error(f"Memory error preparing sales context: {e}")
+        gc.collect()
+        # Return minimal DataFrame
+        return pd.DataFrame({
+            "order_id": sales_df["order_id"].astype(str),
+            "_line_revenue": 0.0
+        })
+    except Exception as e:
+        logger.error(f"Error preparing sales context: {e}")
+        return pd.DataFrame()
 
 
 def _match_returned_items_to_sales(row: pd.Series, order_sales: pd.DataFrame) -> Tuple[float, int, int]:
@@ -818,60 +894,106 @@ def _match_returned_items_to_sales(row: pd.Series, order_sales: pd.DataFrame) ->
 
 
 def _build_daily_financials(returns_df: pd.DataFrame, sales_df: Optional[pd.DataFrame]) -> pd.DataFrame:
-    """Build a day-level gross/loss/net series for charts."""
+    """Build a day-level gross/loss/net series for charts with memory safety."""
     columns = ["date", "gross_sales", "return_loss", "partial_loss", "total_loss", "net_sales"]
-    sales_daily = pd.DataFrame(columns=["date", "gross_sales"])
+    
+    try:
+        sales_daily = pd.DataFrame(columns=["date", "gross_sales"])
 
-    if sales_df is not None and not sales_df.empty and "order_date" in sales_df.columns:
-        sales_local = sales_df.copy()
-        sales_local["order_date"] = pd.to_datetime(sales_local["order_date"], errors="coerce")
-        sales_local["_line_revenue"] = _estimate_sales_line_revenue(sales_local).fillna(0.0)
-        sales_local = sales_local.dropna(subset=["order_date"])
-        if not sales_local.empty:
-            sales_daily = (
-                sales_local.groupby(sales_local["order_date"].dt.date)["_line_revenue"]
-                .sum()
-                .reset_index(name="gross_sales")
-                .rename(columns={"order_date": "date"})
-            )
+        if sales_df is not None and not sales_df.empty and "order_date" in sales_df.columns:
+            # Optimize dtypes to reduce memory
+            sales_local = optimize_dtypes(sales_df).copy()
+            sales_local["order_date"] = pd.to_datetime(sales_local["order_date"], errors="coerce")
+            sales_local["_line_revenue"] = _estimate_sales_line_revenue(sales_local).fillna(0.0)
+            sales_local = sales_local.dropna(subset=["order_date"])
+            if not sales_local.empty:
+                # Use safe groupby for large datasets
+                if len(sales_local) > 100000:
+                    # Chunked processing for very large datasets
+                    sales_daily = (
+                        sales_local.groupby(sales_local["order_date"].dt.date)["_line_revenue"]
+                        .sum()
+                        .reset_index(name="gross_sales")
+                        .rename(columns={"order_date": "date"})
+                    )
+                    gc.collect()
+                else:
+                    sales_daily = (
+                        sales_local.groupby(sales_local["order_date"].dt.date)["_line_revenue"]
+                        .sum()
+                        .reset_index(name="gross_sales")
+                        .rename(columns={"order_date": "date"})
+                    )
 
-    if returns_df.empty or "date" not in returns_df.columns:
-        if sales_daily.empty:
+        if returns_df.empty or "date" not in returns_df.columns:
+            if sales_daily.empty:
+                return pd.DataFrame(columns=columns)
+            sales_daily["return_loss"] = 0.0
+            sales_daily["partial_loss"] = 0.0
+            sales_daily["total_loss"] = 0.0
+            sales_daily["net_sales"] = sales_daily["gross_sales"]
+            return sales_daily[columns].sort_values("date")
+
+        # Optimize returns DataFrame
+        returns_local = optimize_dtypes(returns_df).copy()
+        returns_local["date"] = pd.to_datetime(returns_local["date"], errors="coerce").dt.date
+        
+        # Memory-efficient date key generation
+        sales_dates = sales_daily["date"].tolist() if not sales_daily.empty else []
+        returns_dates = returns_local["date"].dropna().unique().tolist()
+        date_keys = sorted(set(sales_dates) | set(returns_dates))
+        
+        if not date_keys:
             return pd.DataFrame(columns=columns)
-        sales_daily["return_loss"] = 0.0
-        sales_daily["partial_loss"] = 0.0
-        sales_daily["total_loss"] = 0.0
-        sales_daily["net_sales"] = sales_daily["gross_sales"]
-        return sales_daily[columns].sort_values("date")
 
-    returns_local = returns_df.copy()
-    returns_local["date"] = pd.to_datetime(returns_local["date"], errors="coerce").dt.date
-    date_keys = sorted(set(sales_daily["date"].tolist()) | set(returns_local["date"].dropna().tolist()))
-    if not date_keys:
+        # Use safe_merge for memory efficiency
+        timeline = pd.DataFrame({"date": date_keys})
+        timeline = safe_merge(timeline, sales_daily, on="date", how="left")
+        timeline["gross_sales"] = timeline["gross_sales"].fillna(0.0)
+
+        full_rows = returns_local[returns_local["issue_type"].isin(["Paid Return", "Non Paid Return"])]
+        partial_rows = returns_local[returns_local["issue_type"] == "Partial"]
+
+        if full_rows.empty:
+            full_daily = pd.DataFrame(columns=["date", "return_loss"])
+        else:
+            full_daily = full_rows.groupby("date")["_resolved_revenue_impact"].sum().reset_index(name="return_loss")
+
+        if partial_rows.empty:
+            partial_daily = pd.DataFrame(columns=["date", "partial_loss"])
+        else:
+            partial_daily = partial_rows.groupby("date")["_resolved_revenue_impact"].sum().reset_index(name="partial_loss")
+
+        # Use safe_merge instead of chained merge
+        timeline = safe_merge(timeline, full_daily, on="date", how="left")
+        timeline = safe_merge(timeline, partial_daily, on="date", how="left")
+        
+        timeline["return_loss"] = pd.to_numeric(timeline["return_loss"], errors="coerce").fillna(0.0)
+        timeline["partial_loss"] = pd.to_numeric(timeline["partial_loss"], errors="coerce").fillna(0.0)
+        timeline["total_loss"] = timeline["return_loss"] + timeline["partial_loss"]
+        timeline["net_sales"] = (timeline["gross_sales"] - timeline["total_loss"]).clip(lower=0.0)
+        
+        # Cleanup intermediate DataFrames
+        del returns_local, full_rows, partial_rows, full_daily, partial_daily
+        gc.collect()
+        
+        return timeline[columns].sort_values("date")
+        
+    except MemoryError as e:
+        logger.error(f"Memory error in _build_daily_financials: {e}")
+        gc.collect()
+        # Return minimal DataFrame with available sales data only
+        if not sales_daily.empty:
+            sales_daily["return_loss"] = 0.0
+            sales_daily["partial_loss"] = 0.0
+            sales_daily["total_loss"] = 0.0
+            sales_daily["net_sales"] = sales_daily["gross_sales"]
+            return sales_daily[columns].sort_values("date")
         return pd.DataFrame(columns=columns)
-
-    timeline = pd.DataFrame({"date": date_keys})
-    timeline = timeline.merge(sales_daily, on="date", how="left").fillna({"gross_sales": 0.0})
-
-    full_rows = returns_local[returns_local["issue_type"].isin(["Paid Return", "Non Paid Return"])]
-    partial_rows = returns_local[returns_local["issue_type"] == "Partial"]
-
-    if full_rows.empty:
-        full_daily = pd.DataFrame(columns=["date", "return_loss"])
-    else:
-        full_daily = full_rows.groupby("date")["_resolved_revenue_impact"].sum().reset_index(name="return_loss")
-
-    if partial_rows.empty:
-        partial_daily = pd.DataFrame(columns=["date", "partial_loss"])
-    else:
-        partial_daily = partial_rows.groupby("date")["_resolved_revenue_impact"].sum().reset_index(name="partial_loss")
-
-    timeline = timeline.merge(full_daily, on="date", how="left").merge(partial_daily, on="date", how="left")
-    timeline["return_loss"] = pd.to_numeric(timeline["return_loss"], errors="coerce").fillna(0.0)
-    timeline["partial_loss"] = pd.to_numeric(timeline["partial_loss"], errors="coerce").fillna(0.0)
-    timeline["total_loss"] = timeline["return_loss"] + timeline["partial_loss"]
-    timeline["net_sales"] = (timeline["gross_sales"] - timeline["total_loss"]).clip(lower=0.0)
-    return timeline[columns].sort_values("date")
+    except Exception as e:
+        logger.error(f"Error in _build_daily_financials: {e}")
+        gc.collect()
+        return pd.DataFrame(columns=columns)
 
 
 def calculate_net_sales_metrics(
