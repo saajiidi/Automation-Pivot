@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 from FrontEnd.components import ui
-from BackEnd.core.categories import parse_sku_variants, get_clean_product_name, sort_categories, format_category_label
+from BackEnd.core.categories import parse_sku_variants, get_clean_product_name, get_master_category_list, format_category_label
 
 def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev: pd.DataFrame = None, window_label: str = "period"):
 
@@ -100,17 +100,8 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
         f_c1, f_c2, f_c3, f_c4 = st.columns(4)
         
         with f_c1:
-            # 1. Category
-            raw_cats = set([str(c) for c in df_sales["Category"].dropna().unique() if str(c).strip()])
-            # Ensure parent categories exist if children do (Dynamic Detection)
-            parents_to_add = set()
-            for cat in raw_cats:
-                if " - " in cat:
-                    parent = cat.split(" - ")[0]
-                    if parent not in raw_cats:
-                        parents_to_add.add(parent)
-            
-            cat_list = sort_categories(list(raw_cats.union(parents_to_add)))
+            # 1. Category - use master list for consistent hierarchy display
+            cat_list = get_master_category_list()
             sel_cats = st.multiselect("Categories", ["All"] + cat_list, default=["All"], format_func=format_category_label)
             active_cats = [] if "All" in sel_cats or not sel_cats else sel_cats
 

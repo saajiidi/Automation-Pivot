@@ -24,24 +24,18 @@ def apply_global_filters(df: pd.DataFrame, categories: list[str] = None, statuse
     return filtered_df
 
 def get_available_filters(df: pd.DataFrame):
-    """Extracts unique categories and statuses for global filter controls (Generalized Parent Detection)."""
-    if df.empty:
-        return [], []
+    """Returns master category list and statuses for global filter controls.
     
-    raw_cats = set([str(c) for c in df["Category"].dropna().unique() if str(c).strip()])
+    Uses the centralized master category list to ensure consistent
+    hierarchy display regardless of data availability.
+    """
+    from BackEnd.core.categories import get_master_category_list
     
-    # Ensure parents exist if children do (e.g. Jeans, Shirt, Wallet)
-    parents_to_add = set()
-    for cat in raw_cats:
-        if " - " in cat:
-            parent = cat.split(" - ")[0]
-            if parent not in raw_cats:
-                parents_to_add.add(parent)
+    # Always return the complete master category list (preserves custom order)
+    unique_cats = get_master_category_list()
     
-    unique_cats = sorted(list(raw_cats.union(parents_to_add)))
-    
-    # Statuses
-    unique_statuses = sorted([str(s).title() for s in df["order_status"].dropna().unique()])
+    # Statuses - keep sorted as order doesn't matter for statuses
+    unique_statuses = sorted([str(s).title() for s in df["order_status"].dropna().unique()]) if not df.empty else []
     
     return unique_cats, unique_statuses
 

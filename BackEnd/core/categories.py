@@ -22,10 +22,10 @@ CATEGORIES_PRIORITY = [
     "FS Shirt", "FS Shirt - Flannel Shirt", "FS Shirt - Denim Shirt", "FS Shirt - Oxford Shirt", "FS Shirt - Kaftan Shirt", "FS Shirt - FS Casual Shirt",
     "HS Shirt", "HS Shirt - Contrast Shirt", "HS Shirt - HS Casual Shirt",
     "Wallet", "Wallet - Passport Holder", "Wallet - Card Holder", "Wallet - Long Wallet", "Wallet - Bifold Wallet", "Wallet - Trifold Wallet",
-    "Panjabi", "Panjabi - Panjabi", "Panjabi - Old Panjabi",
+    "Panjabi", "Panjabi - Panjabi", "Panjabi - Embroidered Panjabi",
     "Sweatshirt", "Sweatshirt - Cotton Terry Sweatshirt", "Sweatshirt - French Terry Sweatshirt",
     "Polo Shirt", "Turtle-Neck",
-    "Twill Chino", "Twill Chino - Twill Chino Pant", "Twill Chino - Twill Joggers", "Twill Chino - Five Pockets",
+    "Twill", "Twill - Twill Chino", "Twill - Twill Joggers", "Twill - Five Pockets",
     "Trousers", "Trousers - Trousers", "Trousers - Joggers", "Trousers - Cotton Trousers",
     "Boxer", "Leather Bag", "Belt", "Jacket", "Sweater", "Cap", "Mask", "Water Bottle", "Bundles", "Others"
 ]
@@ -34,7 +34,7 @@ def format_category_label(cat: str) -> str:
     """Formats a category string for hierarchical display in UI dropdowns."""
     if not cat: return cat
     if " - " in cat:
-        return f"   └─ {cat.split(' - ', 1)[1]}"
+        return f"↳ {cat.split(' - ', 1)[1]}"
     return cat
 
 def sort_categories(cats):
@@ -49,6 +49,15 @@ def sort_categories(cats):
         except (ValueError, KeyError):
             return 999
     return sorted(cats, key=sort_key)
+
+
+def get_master_category_list() -> list[str]:
+    """Returns the complete master category list for UI dropdowns.
+    
+    This ensures the dropdown always shows all categories in the defined
+    priority order, regardless of whether data exists for each category.
+    """
+    return CATEGORIES_PRIORITY.copy()
 
 _FUZZY_CACHE = {}
 

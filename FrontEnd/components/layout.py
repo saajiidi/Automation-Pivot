@@ -51,12 +51,17 @@ def setup_theme():
         [data-testid="stMetricContainer"], .metric-card, .bi-hero, .hub-card {
             background: var(--surface) !important;
             border: 1px solid var(--surface-variant) !important;
-            border-radius: 16px !important; 
+            border-radius: 16px !important;
             padding: 1.5rem !important;
             box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
             border: 1px solid rgba(128, 128, 128, 0.1) !important;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
             backdrop-filter: blur(12px) !important;
+            height: 140px !important;
+            min-height: 140px !important;
+            max-height: 140px !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
         }
 
         .hub-card:hover {
@@ -77,13 +82,17 @@ def setup_theme():
         /* Metric Highlight Styling */
         .metric-highlight {
             padding: 1.25rem !important;
-            min-height: 120px !important;
+            height: 140px !important;
+            min-height: 140px !important;
+            max-height: 140px !important;
             border-left: 4px solid var(--primary) !important;
             display: flex;
             flex-direction: column;
             justify-content: center;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
         }
-        
+
         .metric-highlight-label {
             font-size: 0.75rem;
             font-weight: 800;
@@ -92,21 +101,31 @@ def setup_theme():
             letter-spacing: 0.08em;
             margin-bottom: 4px;
             opacity: 0.7;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
         }
-        
+
         .metric-highlight-value {
             font-size: 2.2rem;
             font-weight: 800;
             color: var(--on-surface);
             letter-spacing: -0.04em;
             line-height: 1.1;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
         }
 
         .metric-icon-card {
             display: flex;
             align-items: center;
             gap: 1.2rem;
-            min-height: 100px !important;
+            height: 140px !important;
+            min-height: 140px !important;
+            max-height: 140px !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
         }
         
         .metric-icon-wrap {

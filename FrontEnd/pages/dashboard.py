@@ -25,7 +25,7 @@ from .dashboard_lib.data_helpers import (
     apply_global_filters,
     get_available_filters
 )
-from BackEnd.core.categories import sort_categories, format_category_label, get_subcategory_name
+from BackEnd.core.categories import get_master_category_list, format_category_label, get_subcategory_name
 from .dashboard_lib.story import render_dashboard_story
 from .dashboard_lib.bi_analytics import (
     render_today_vs_last_day_sales_chart,
@@ -356,24 +356,39 @@ def render_intelligence_hub_page():
 
     net_metrics = calculate_net_sales_metrics(df_returns_filtered, sales_df=df_exec)
     
+    # Debug info for returns data
+    with st.expander("🔍 DEBUG: Returns Data Info", expanded=False):
+        st.write(f"Returns data rows: {len(df_returns_all)}")
+        st.write(f"Filtered returns rows: {len(df_returns_filtered)}")
+        st.write(f"Date range: {start_dt} to {end_dt}")
+        if not df_returns_filtered.empty:
+            st.write(f"Issue types: {df_returns_filtered['issue_type'].value_counts().to_dict()}")
+            st.write(f"Sample returned_items: {df_returns_filtered['returned_items'].iloc[0] if len(df_returns_filtered) > 0 else 'N/A'}")
+            # Check for items with non-empty returned_items
+            has_items = df_returns_filtered[df_returns_filtered['returned_items'].apply(lambda x: len(x) > 0 if isinstance(x, list) else False)]
+            st.write(f"Rows with items: {len(has_items)}")
+            if len(has_items) > 0:
+                st.write("Sample row with items:")
+                st.dataframe(has_items[['order_id_raw', 'issue_type', 'product_details', 'returned_items']].head(2))
+        st.write(f"Net metrics: {net_metrics}")
+    
     st.markdown('<div class="sidebar-group-label" style="font-size:0.85rem; letter-spacing:1px;">💰 TRUE REVENUE & FINANCIAL IMPACT</div>', unsafe_allow_html=True)
     gross = net_metrics.get('gross_sales', 0)
     net_sales = net_metrics.get('net_sales', 0)
     net_yield_pct = (net_sales / gross * 100) if gross > 0 else 0.0
 
-    nc1, nc2, nc3, nc4, nc5 = st.columns(5)
-    with nc1: ui.icon_metric("Gross Verified Revenue", f"৳{gross:,.0f}", icon="💎", delta="Active", delta_val=gross)
-    with nc2: ui.icon_metric("Loss (Returns + Partials)", f"৳{(net_metrics.get('return_value_extracted', 0) + net_metrics.get('partial_amounts', 0)):,.0f}", icon="📉", delta="Lost", delta_val=-(net_metrics.get('return_value_extracted', 0) + net_metrics.get('partial_amounts', 0)))
-    with nc3: ui.icon_metric("Net Settled Sales", f"৳{net_sales:,.0f}", icon="🌟", delta="Net", delta_val=net_sales)
-    with nc4: ui.icon_metric("Net Yield %", f"{net_yield_pct:.1f}%", icon="📊", delta="Efficiency", delta_val=net_yield_pct)
-    
-    # Total returned items and their value
-    total_ret_items = net_metrics.get('total_returned_items', 0)
+    # Total returned items and their value (moved to first position)
+    total_ret_qty = net_metrics.get('total_return_qty_all', 0)  # Total qty from ALL returns
     total_ret_value = net_metrics.get('return_value_extracted', 0)
-    # Calculate return rate relative to total items sold in the same period
-    ret_rate_items = (total_ret_items / total_items * 100) if total_items > 0 else 0.0
-    
-    with nc5: ui.icon_metric("Total Returned Items", f"{total_ret_items} Units", icon="📦", delta=f"{ret_rate_items:.1f}% Return Rate", delta_val=-total_ret_value)
+    returned_orders_pct = net_metrics.get('returned_orders_pct', 0.0)
+
+    nc1, nc2, nc3, nc4, nc5, nc6 = st.columns(6)
+    with nc1: ui.icon_metric("Total Returned Items", f"{total_ret_qty} Units", icon="📦", delta=f"{returned_orders_pct:.1f}% Orders", delta_val=-total_ret_value)
+    with nc2: ui.icon_metric("Total Exchanged Items", f"{net_metrics.get('total_exchanged_items', 0)} Units", icon="🔄", delta="Total", delta_val=net_metrics.get('total_exchanged_items', 0))
+    with nc3: ui.icon_metric("Loss (Returns + Partials)", f"৳{(net_metrics.get('return_value_extracted', 0) + net_metrics.get('partial_amounts', 0)):,.0f}", icon="📉", delta="Lost", delta_val=-(net_metrics.get('return_value_extracted', 0) + net_metrics.get('partial_amounts', 0)))
+    with nc4: ui.icon_metric("Net Settled Sales", f"৳{net_sales:,.0f}", icon="🌟", delta="Net", delta_val=net_sales)
+    with nc5: ui.icon_metric("Net Yield %", f"{net_yield_pct:.1f}%", icon="📊", delta="Efficiency", delta_val=net_yield_pct)
+    with nc6: ui.icon_metric("Returned Orders %", f"{returned_orders_pct:.1f}%", icon="📈", delta=f"{net_metrics.get('return_count', 0)} Orders", delta_val=-returned_orders_pct)
 
     # --- RESTORED FINANCIAL INTEGRITY CHART ---
     # Prepare Daily Financial Gap Data

@@ -117,11 +117,11 @@ def operational_card(title: str, order_count: int, item_count: int, revenue: flo
     """Premium multi-line operational metric card with optional alert pulse."""
     delta_class = "delta-up" if delta_val >= 0 else "delta-down"
     delta_icon = "↑" if delta_val >= 0 else "↓"
-    delta_html = f'<div class="{delta_class}" style="margin-top:10px; font-size:0.85rem; font-weight:700;">{delta_icon} {delta_text}</div>' if delta_text else ""
-    
+    delta_html = f'<div class="{delta_class}" style="margin-top:8px; font-size:0.85rem; font-weight:700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{delta_icon} {delta_text}</div>' if delta_text else ""
+
     pulse_css = "animation: pulse-amber 2s infinite;" if is_alert else ""
     border_style = "2px solid #F59E0B" if is_alert else "1px solid var(--outline)"
-    
+
     st.markdown(
         f"""
         <style>
@@ -131,14 +131,18 @@ def operational_card(title: str, order_count: int, item_count: int, revenue: flo
             100% {{ box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }}
         }}
         .op-card {{
-            padding: 1.5rem;
-            min-height: 160px;
+            padding: 1.25rem;
+            height: 140px;
+            min-height: 140px;
+            max-height: 140px;
             background: var(--surface);
             border-radius: 16px;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            overflow: hidden;
+            box-sizing: border-box;
         }}
         .op-card:hover {{
             transform: translateY(-4px);
@@ -148,15 +152,15 @@ def operational_card(title: str, order_count: int, item_count: int, revenue: flo
         </style>
         <div class="op-card" style="{pulse_css} border: {border_style};">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div style="font-size: 1rem; font-weight: 700; color: var(--on-surface); line-height: 1.2; letter-spacing: -0.01em;">{title}</div>
-                <div style="font-size: 1.5rem; opacity: 0.9;">{icon}</div>
+                <div style="font-size: 0.95rem; font-weight: 700; color: var(--on-surface); line-height: 1.2; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{title}</div>
+                <div style="font-size: 1.5rem; opacity: 0.9; flex-shrink: 0;">{icon}</div>
             </div>
-            <div style="margin-top: 12px;">
-                <div style="display: flex; gap: 12px; margin-bottom: 6px;">
-                    <div style="font-size: 0.8rem; color: var(--on-surface-variant); font-weight: 600;">Orders: <span style="color: var(--on-surface);">{order_count:,}</span></div>
-                    <div style="font-size: 0.8rem; color: var(--on-surface-variant); font-weight: 600;">{item_label}: <span style="color: var(--on-surface);">{item_count:,}</span></div>
+            <div style="margin-top: 8px;">
+                <div style="display: flex; gap: 12px; margin-bottom: 4px;">
+                    <div style="font-size: 0.8rem; color: var(--on-surface-variant); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Orders: <span style="color: var(--on-surface);">{order_count:,}</span></div>
+                    <div style="font-size: 0.8rem; color: var(--on-surface-variant); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{item_label}: <span style="color: var(--on-surface);">{item_count:,}</span></div>
                 </div>
-                <div style="font-size: 1.6rem; font-weight: 800; color: var(--primary); letter-spacing: -0.03em;">TK {revenue:,.0f}</div>
+                <div style="font-size: 1.5rem; font-weight: 800; color: var(--primary); letter-spacing: -0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">TK {revenue:,.0f}</div>
                 {delta_html}
             </div>
         </div>

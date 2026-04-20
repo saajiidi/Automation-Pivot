@@ -4,7 +4,7 @@ import plotly.express as px
 import numpy as np
 from datetime import datetime
 from FrontEnd.components import ui
-from BackEnd.core.categories import get_category_for_sales, parse_sku_variants, get_clean_product_name, sort_categories, format_category_label
+from BackEnd.core.categories import get_category_for_sales, parse_sku_variants, get_clean_product_name, get_master_category_list, format_category_label
 
 def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, df_sales: pd.DataFrame = None):
     st.subheader("Stock Insight")
@@ -71,18 +71,8 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
     f_c1, f_c2, f_c3 = st.columns(3)
     
     with f_c1:
-        raw_cats = list(inventory["Category"].dropna().unique())
-        # Ensure parent categories exist if children do (Generalized Parent Detection)
-        parents_to_add = set()
-        for cat in raw_cats:
-            if " - " in str(cat):
-                parent = str(cat).split(" - ")[0]
-                if parent not in raw_cats:
-                    parents_to_add.add(parent)
-        
-        raw_cats = list(set(raw_cats).union(parents_to_add))
-            
-        cat_list = sort_categories([str(c) for c in raw_cats if str(c).strip()])
+        # Use master category list for consistent hierarchy display
+        cat_list = get_master_category_list()
         sel_cat = st.selectbox("Category", ["All"] + cat_list, index=0, key="sniper_cat_select", format_func=format_category_label)
         active_cat = None if sel_cat == "All" else sel_cat
 

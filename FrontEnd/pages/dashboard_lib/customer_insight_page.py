@@ -44,20 +44,24 @@ logger = get_logger("customer_insight_page")
 def _render_metric_cards(metrics: Dict[str, Any]) -> None:
     """Render consistent, modern metric cards using custom HTML/CSS."""
     
-    # Custom CSS for consistent cards
+    # Custom CSS for consistent fixed-height cards
     st.markdown("""
         <style>
         .insight-card {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 12px;
-            padding: 18px;
+            padding: 16px;
             text-align: center;
             transition: transform 0.2s, background 0.2s;
             height: 140px;
+            min-height: 140px;
+            max-height: 140px;
             display: flex;
             flex-direction: column;
             justify-content: center;
+            overflow: hidden;
+            box-sizing: border-box;
         }
         .insight-card:hover {
             background: rgba(255, 255, 255, 0.06);
@@ -70,6 +74,9 @@ def _render_metric_cards(metrics: Dict[str, Any]) -> None:
             color: #ffffff;
             margin: 0;
             line-height: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .insight-label {
             font-size: 0.8rem;
@@ -78,10 +85,16 @@ def _render_metric_cards(metrics: Dict[str, Any]) -> None:
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-top: 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .insight-delta {
             font-size: 0.75rem;
             margin-top: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -101,7 +114,7 @@ def _render_metric_cards(metrics: Dict[str, Any]) -> None:
                 <div class="insight-card">
                     <div class="insight-value" style="color: {card['color']}">{card['value']}</div>
                     <div class="insight-label">{card['label']}</div>
-                    <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">{card['sub']}</div>
+                    <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{card['sub']}</div>
                 </div>
             """, unsafe_allow_html=True)
 

@@ -66,7 +66,7 @@ def render_customer_filters(
     Returns:
         Dictionary with filter values
     """
-    from BackEnd.core.categories import sort_categories, format_category_label
+    from BackEnd.core.categories import get_master_category_list, format_category_label
     
     st.caption("All filters work together with AND logic. Adjust and click Apply.")
     st.info("📅 Date range is controlled from the global sidebar (Business Intelligence > Custom Date Range)")
@@ -103,16 +103,8 @@ def render_customer_filters(
         f_c1, f_c2, f_c3 = st.columns(3)
         
         with f_c1:
-            # 1. Category (hierarchical with indented sub-categories)
-            raw_cats = set([str(c) for c in sales_df["Category"].dropna().unique() if str(c).strip()])
-            parents_to_add = set()
-            for cat in raw_cats:
-                if " - " in cat:
-                    parent = cat.split(" - ")[0]
-                    if parent not in raw_cats:
-                        parents_to_add.add(parent)
-            
-            cat_list = sort_categories(list(raw_cats.union(parents_to_add)))
+            # 1. Category - use master list for consistent hierarchy display
+            cat_list = get_master_category_list()
             sel_cats = st.multiselect(
                 "Categories", ["All"] + cat_list, default=["All"],
                 format_func=format_category_label,

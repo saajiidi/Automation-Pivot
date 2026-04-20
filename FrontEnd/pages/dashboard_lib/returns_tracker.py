@@ -19,7 +19,6 @@ from BackEnd.services.returns_tracker import (
     calculate_net_sales_metrics,
     get_issue_type_color,
     DEFAULT_SHEET_URL,
-    map_items_to_skus,
     get_order_items_breakdown,
     track_reordering_customers,
 )
@@ -234,7 +233,7 @@ def _render_kpi_cards(metrics: dict) -> None:
 
 
 def _kpi_card(label: str, value: str, subtitle: str, color: str) -> str:
-    """Generate a premium KPI card HTML."""
+    """Generate a premium KPI card HTML with consistent fixed height."""
     return f"""
     <div style="
         background: linear-gradient(135deg, {color}15, {color}08);
@@ -243,16 +242,27 @@ def _kpi_card(label: str, value: str, subtitle: str, color: str) -> str:
         border-radius: 12px;
         padding: 16px;
         text-align: center;
+        height: 140px;
+        min-height: 140px;
+        max-height: 140px;
+        overflow: hidden;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     ">
         <div style="font-size: 0.72rem; font-weight: 700; color: {color};
-                     letter-spacing: 0.5px; text-transform: uppercase;">
+                     letter-spacing: 0.5px; text-transform: uppercase;
+                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             {label}
         </div>
         <div style="font-size: 1.8rem; font-weight: 800; color: var(--text-color);
-                     margin: 4px 0;">
+                     margin: 4px 0;
+                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             {value}
         </div>
-        <div style="font-size: 0.7rem; color: #9ca3af;">
+        <div style="font-size: 0.7rem; color: #9ca3af;
+                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             {subtitle}
         </div>
     </div>
@@ -266,12 +276,13 @@ def _kpi_card(label: str, value: str, subtitle: str, color: str) -> str:
 def _render_charts(df: pd.DataFrame, metrics: dict, sales_df: pd.DataFrame) -> None:
     """Render the analytics charts."""
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📈 Monthly Trends",
         "🥧 Return Reasons",
         "📦 Product Heatmap",
         "🛡️ Customer Recovery",
         "📋 Return Inventory",
+        "📦 Returned Items List",
     ])
 
     with tab1:
@@ -282,12 +293,15 @@ def _render_charts(df: pd.DataFrame, metrics: dict, sales_df: pd.DataFrame) -> N
 
     with tab3:
         _render_product_heatmap(df)
-        
+
     with tab4:
         _render_customer_recovery(df, sales_df)
 
     with tab5:
         _render_return_inventory(df, sales_df)
+
+    with tab6:
+        _render_returned_items_list(df)
 
 
 def _render_monthly_trend(df: pd.DataFrame) -> None:
@@ -594,9 +608,15 @@ def _render_return_inventory(df: pd.DataFrame, sales_df: pd.DataFrame) -> None:
     item_df = pd.DataFrame(item_rows)
 
     # 2. Filters for the Inventory
+    from BackEnd.core.categories import get_master_category_list, format_category_label
+    
     c1, c2, c3 = st.columns(3)
     with c1:
-        cat_filter = st.multiselect("Filter Category", options=sorted(item_df["Category"].unique()))
+        # Use master category list for consistent hierarchy display
+        master_cats = get_master_category_list()
+        # Filter to only categories present in data but preserve master order
+        available_cats = [c for c in master_cats if c in item_df["Category"].values]
+        cat_filter = st.multiselect("Filter Category", options=available_cats, format_func=format_category_label)
     with c2:
         type_filter = st.multiselect("Filter Issue Type", options=sorted(item_df["Type"].unique()))
     with c3:
@@ -633,6 +653,196 @@ def _render_return_inventory(df: pd.DataFrame, sales_df: pd.DataFrame) -> None:
         file_name=f"return_inventory_{datetime.now().strftime('%Y%m%d')}.csv",
         mime='text/csv',
     )
+
+
+def _render_returned_items_list(df: pd.DataFrame) -> None:
+    """Display a detailed list of returned items from all Returns.
+
+    This view shows individual items returned from the 'Issue Or Product Details' column,
+    including Paid Return, Non Paid Return, and Partial.
+    """
+    st.markdown("#### 📦 Returned Items Detail List")
+    st.caption("Individual items from ALL RETURNS (Paid, Non Paid, Partial). Data extracted from 'Issue Or Product Details' column.")
+
+    # Debug info
+    with st.expander("🔍 Debug Data Info", expanded=False):
+        st.write(f"Total rows in dataset: {len(df)}")
+        st.write(f"Issue types: {df['issue_type'].value_counts().to_dict() if not df.empty else 'N/A'}")
+        if not df.empty and 'returned_items' in df.columns:
+            sample = df[df['returned_items'].apply(lambda x: len(x) > 0 if isinstance(x, list) else False)].head(3)
+            st.write("Sample rows with items:")
+            st.dataframe(sample[['order_id_raw', 'issue_type', 'product_details', 'returned_items']])
+
+    # Filter for Returns (Paid, Non Paid, and Partial)
+    return_mask = df["issue_type"].isin(["Paid Return", "Non Paid Return", "Partial"])
+    returns_df = df[return_mask].copy()
+
+    if returns_df.empty:
+        st.warning("⚠️ No Return items found in the current selection.")
+        st.info("Check the Debug Data Info above to see what issue types are available.")
+        return
+
+    # Explode items from returned_items column
+    item_rows = []
+    for _, row in returns_df.iterrows():
+        items = row.get("returned_items", [])
+        if not isinstance(items, list):
+            continue
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+
+            item_rows.append({
+                "Date": row["date"].strftime("%Y-%m-%d") if pd.notnull(row["date"]) else "N/A",
+                "Order ID": row["order_id_raw"],
+                "Order Number": row.get("order_id", "N/A"),
+                "Issue Type": row.get("issue_type", "N/A"),
+                "SKU": item.get("sku", "N/A"),
+                "Product Name": item.get("name", "Unknown"),
+                "Size": item.get("size", "N/A"),
+                "Qty": item.get("qty", 1),
+                "Category": item.get("category", "General"),
+                "Return Reason": row.get("return_reason", "N/A"),
+                "Product Details": row.get("product_details", "")[:100] + "..." if len(row.get("product_details", "")) > 100 else row.get("product_details", ""),
+            })
+
+    if not item_rows:
+        st.info("No individual items found in Returns.")
+        return
+
+    items_df = pd.DataFrame(item_rows)
+
+    # Summary metrics
+    total_items = len(items_df)
+    total_qty = items_df["Qty"].sum()
+    unique_orders = items_df["Order ID"].nunique()
+
+    # Summary row
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        ui_metric_small("Total Items", f"{total_items}", "📦")
+    with m2:
+        ui_metric_small("Total Qty", f"{total_qty}", "🔢")
+    with m3:
+        ui_metric_small("Unique Orders", f"{unique_orders}", "📋")
+    with m4:
+        unique_skus = items_df[items_df["SKU"] != "N/A"]["SKU"].nunique()
+        ui_metric_small("Unique SKUs", f"{unique_skus}", "🏷️")
+
+    st.markdown("---")
+
+    # Filters
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        from BackEnd.core.categories import get_master_category_list, format_category_label
+        master_cats = get_master_category_list()
+        available_cats = [c for c in master_cats if c in items_df["Category"].values]
+        cat_filter = st.multiselect("Filter Category", options=available_cats, format_func=format_category_label, key="returned_items_cat")
+    with c2:
+        search_product = st.text_input("🔍 Search Product", placeholder="Enter product name...", key="returned_items_product")
+    with c3:
+        search_sku = st.text_input("🔍 Search SKU", placeholder="Enter SKU...", key="returned_items_sku")
+    with c4:
+        search_order = st.text_input("🔍 Search Order ID", placeholder="Enter order ID...", key="returned_items_order")
+
+    # Apply filters
+    filtered_df = items_df.copy()
+    if cat_filter:
+        filtered_df = filtered_df[filtered_df["Category"].isin(cat_filter)]
+    if search_product:
+        filtered_df = filtered_df[filtered_df["Product Name"].str.contains(search_product, case=False, na=False)]
+    if search_sku:
+        filtered_df = filtered_df[filtered_df["SKU"].astype(str).str.contains(search_sku, case=False, na=False)]
+    if search_order:
+        filtered_df = filtered_df[filtered_df["Order ID"].astype(str).str.contains(search_order, case=False, na=False)]
+
+    # Display data table
+    st.dataframe(
+        filtered_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Date": st.column_config.DateColumn("Date"),
+            "Order ID": st.column_config.TextColumn("Order ID"),
+            "Order Number": st.column_config.TextColumn("Order Number"),
+            "Issue Type": st.column_config.TextColumn("Issue Type"),
+            "SKU": st.column_config.TextColumn("SKU"),
+            "Product Name": st.column_config.TextColumn("Product Name"),
+            "Size": st.column_config.TextColumn("Size"),
+            "Qty": st.column_config.NumberColumn("Qty", format="%d"),
+            "Category": st.column_config.TextColumn("Category"),
+            "Return Reason": st.column_config.TextColumn("Return Reason"),
+            "Product Details": st.column_config.TextColumn("Raw Details", width="large"),
+        }
+    )
+
+    st.caption(f"Showing {len(filtered_df)} returned items from {unique_orders} Return orders (Paid, Non Paid, Partial)")
+
+    # Export option
+    csv = filtered_df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Download Returned Items CSV",
+        data=csv,
+        file_name=f"returned_items_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime='text/csv',
+        key="returned_items_csv"
+    )
+
+    # ── RETURN REASON ANALYSIS ──
+    st.markdown("---")
+    st.markdown("#### 🔍 Why Are Items Being Returned?")
+    st.caption("Analysis of return reasons to predict patterns")
+
+    if not filtered_df.empty and 'Return Reason' in filtered_df.columns:
+        reason_counts = filtered_df['Return Reason'].value_counts()
+        if not reason_counts.empty:
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**📊 Return Reason Breakdown:**")
+                reason_df = reason_counts.reset_index()
+                reason_df.columns = ['Reason', 'Count']
+                reason_df['% of Returns'] = (reason_df['Count'] / reason_df['Count'].sum() * 100).round(1)
+                st.dataframe(reason_df, use_container_width=True, hide_index=True)
+
+            with c2:
+                st.markdown("**💡 Predictions & Insights:**")
+                top_reason = reason_counts.index[0]
+                top_pct = reason_counts.iloc[0] / reason_counts.sum() * 100
+
+                insights = []
+                if top_reason == "Size Issue":
+                    insights.append(f"🔴 **{top_pct:.1f}% Size Issues** - Consider adding size charts or fit guides")
+                elif top_reason == "Quality Issue":
+                    insights.append(f"🔴 **{top_pct:.1f}% Quality Issues** - Review supplier quality control")
+                elif top_reason == "Color Issue":
+                    insights.append(f"🔴 **{top_pct:.1f}% Color Issues** - Improve product photography accuracy")
+                elif top_reason == "CNR":
+                    insights.append(f"🔴 **{top_pct:.1f}% CNR** - Enhance delivery communication/scheduling")
+                elif top_reason == "Changed Mind":
+                    insights.append(f"🟡 **{top_pct:.1f}% Changed Mind** - Consider better product descriptions")
+                else:
+                    insights.append(f"🟡 **{top_pct:.1f}% {top_reason}** - Review this category")
+
+                # Size-related insights
+                if 'Size' in filtered_df.columns:
+                    size_issues = filtered_df[filtered_df['Return Reason'] == 'Size Issue']
+                    if not size_issues.empty:
+                        common_sizes = size_issues['Size'].value_counts().head(3)
+                        if not common_sizes.empty:
+                            insights.append(f"📏 Most returned sizes: {', '.join(common_sizes.index)}")
+
+                # Category insights
+                cat_issues = filtered_df['Category'].value_counts().head(3)
+                if not cat_issues.empty:
+                    insights.append(f"👕 Top returned categories: {', '.join(cat_issues.index)}")
+
+                for insight in insights:
+                    st.markdown(f"- {insight}")
+        else:
+            st.info("No return reason data available for analysis.")
+    else:
+        st.info("Insufficient data for return reason prediction.")
 
 
 def ui_metric_small(label: str, value: str, icon: str):

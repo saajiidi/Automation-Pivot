@@ -288,7 +288,13 @@ def _extract_partial_amount(details: str) -> float:
 
 
 def _normalize_product_names(details: str) -> list[dict[str, Any]]:
-    """Granular extraction of product details (Name, Size, Qty, Category)."""
+    """Granular extraction of product details (Name, Size, SKU, Qty, Category).
+
+    Handles formats like:
+    - "Item name - size - sku"
+    - "Item name - size - sku; item name - size - sku"
+    - "Item name (size) x2"
+    """
     if not details or details.lower() == "nan":
         return []
 
@@ -299,7 +305,7 @@ def _normalize_product_names(details: str) -> list[dict[str, Any]]:
     if not clean:
         return []
 
-    # 2. Split items
+    # 2. Split items by semicolon, comma, or plus
     raw_items = re.split(r'[,+;]', clean)
     processed = []
 
@@ -313,23 +319,55 @@ def _normalize_product_names(details: str) -> list[dict[str, Any]]:
         if qty_match:
             qty = int(qty_match.group(1))
             item = item[:qty_match.start()].strip()
-        
-        # --- Extract Size (e.g., (32), (L), [XL], size 34) ---
-        size = "N/A"
-        size_match = re.search(r'[\(\[\{](.*?)[\)\]\}]', item)
-        if size_match:
-            size = size_match.group(1).strip()
-            item = item[:size_match.start()].strip()
-        else:
-            # Try finding size without brackets at the end
-            size_match_alt = re.search(r'\s+([SLM]|[XL]{1,2}|3\d|4\d|2\d)\s*$', item, re.IGNORECASE)
-            if size_match_alt:
-                size = size_match_alt.group(1).strip()
-                item = item[:size_match_alt.start()].strip()
 
-        # --- Clean Name ---
+        # --- Parse "Name - Size - SKU" format ---
         name = item.strip()
-        
+        size = "N/A"
+        sku = "N/A"
+
+        # Check for dash-separated format: "Name - Size - SKU"
+        dash_parts = [p.strip() for p in item.split('-') if p.strip()]
+
+        if len(dash_parts) >= 3:
+            # Format: "Item name - size - sku"
+            sku = dash_parts[-1]  # Last part is SKU
+            size = dash_parts[-2]  # Second to last is size
+            name = ' - '.join(dash_parts[:-2])  # Everything else is name
+        elif len(dash_parts) == 2:
+            # Format: "Item name - sku" or "Item name - size"
+            # Try to determine if last part is SKU (usually alphanumeric, caps) or size
+            last_part = dash_parts[-1]
+            if re.match(r'^[A-Z0-9]{3,}$', last_part):  # Looks like SKU (caps + numbers)
+                sku = last_part
+                name = dash_parts[0]
+            else:  # Probably size
+                size = last_part
+                name = dash_parts[0]
+        else:
+            # No dashes - try bracket format for size
+            size_match = re.search(r'[\(\[\{](.*?)[\)\]\}]', item)
+            if size_match:
+                size = size_match.group(1).strip()
+                name = item[:size_match.start()].strip()
+            else:
+                # Try finding size without brackets at the end
+                size_match_alt = re.search(r'\s+([SLM]|[XL]{1,2}|3\d|4\d|2\d)\s*$', item, re.IGNORECASE)
+                if size_match_alt:
+                    size = size_match_alt.group(1).strip()
+                    name = item[:size_match_alt.start()].strip()
+
+        # --- Extract SKU if still not found (look for patterns like CODE123, SKU: ABC) ---
+        if sku == "N/A":
+            # Look for SKU pattern: uppercase letters followed by numbers
+            sku_match = re.search(r'\b([A-Z]{2,}\d{2,})\b', name)
+            if sku_match:
+                sku = sku_match.group(1)
+                # Remove SKU from name
+                name = name.replace(sku, '').strip()
+
+        # --- Clean up name ---
+        name = name.strip(' -_')
+
         # --- Infer Category ---
         category = "General"
         cat_keywords = {
@@ -342,15 +380,16 @@ def _normalize_product_names(details: str) -> list[dict[str, Any]]:
             if any(k in name.lower() for k in keywords):
                 category = cat
                 break
-        
+
         if len(name) > 2:
             processed.append({
                 "name": name,
                 "size": size,
+                "sku": sku,
                 "qty": qty,
                 "category": category
             })
-            
+
     return processed
 
 
@@ -535,9 +574,9 @@ def calculate_net_sales_metrics(
     )
 
     # ── Total Items in Returns ──
-    # sum of qty for all returned items
+    # sum of qty for PAID RETURN items only (excluding Non Paid Return and Partial)
     total_returned_items = 0
-    for items in returns_df[returns_df["issue_type"].isin(["Paid Return", "Non Paid Return"])]["returned_items"]:
+    for items in returns_df[returns_df["issue_type"] == "Paid Return"]["returned_items"]:
         if isinstance(items, list):
             for i in items:
                 if isinstance(i, dict):
@@ -547,10 +586,41 @@ def calculate_net_sales_metrics(
         else:
             total_returned_items += 1
 
+    # ── Total Items in Exchanges ──
+    # sum of qty for EXCHANGE items
+    total_exchanged_items = 0
+    for items in returns_df[returns_df["issue_type"] == "Exchange"]["returned_items"]:
+        if isinstance(items, list):
+            for i in items:
+                if isinstance(i, dict):
+                    total_exchanged_items += i.get("qty", 1)
+                else:
+                    total_exchanged_items += 1
+        else:
+            total_exchanged_items += 1
+
+    # ── Total Return Qty (ALL types: Paid, Non Paid, Partial) ──
+    total_return_qty_all = 0
+    for items in returns_df[returns_df["issue_type"].isin(["Paid Return", "Non Paid Return", "Partial"])]["returned_items"]:
+        if isinstance(items, list):
+            for i in items:
+                if isinstance(i, dict):
+                    total_return_qty_all += i.get("qty", 1)
+                else:
+                    total_return_qty_all += 1
+        else:
+            total_return_qty_all += 1
+
+    # ── Returned Orders Percentage ──
+    returned_orders_pct = (return_count / total_orders * 100) if total_orders > 0 else 0.0
+
     metrics = {
         "total_issues": len(unique_orders),
         "return_count": int(return_count),
         "total_returned_items": int(total_returned_items),
+        "total_return_qty_all": int(total_return_qty_all),
+        "returned_orders_pct": round(returned_orders_pct, 1),
+        "total_exchanged_items": int(total_exchanged_items),
         "paid_return_count": int(paid_return_count),
         "non_paid_return_count": int(non_paid_return_count),
         "partial_count": int(partial_count),
