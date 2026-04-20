@@ -470,12 +470,15 @@ def render_intelligence_hub_page():
 
     gross = net_metrics.get('gross_sales', 0)
     net_sales = net_metrics.get('net_sales', 0)
-    net_yield_pct = (net_sales / gross * 100) if gross > 0 else 0.0
+    net_yield_pct = net_metrics.get('net_yield_pct', (net_sales / gross * 100) if gross > 0 else 0.0)
 
     # Total returned items and their value (moved to first position)
     total_ret_qty = net_metrics.get('total_return_qty_all', 0)  # Total qty from ALL returns
-    total_ret_value = net_metrics.get('return_value_extracted', 0)
+    total_ret_value = net_metrics.get('full_return_loss', net_metrics.get('return_value_extracted', 0))
     returned_orders_pct = net_metrics.get('returned_orders_pct', 0.0)
+    partial_loss = net_metrics.get('partial_loss', net_metrics.get('partial_amounts', 0))
+    total_loss = net_metrics.get('total_loss', total_ret_value + partial_loss)
+    attribution_confidence = net_metrics.get('attribution_confidence_pct', 0.0)
 
     nc1, nc2, nc3, nc4, nc5, nc6 = st.columns(6)
     with nc1: ui.icon_metric("Total Returned Items", f"{total_ret_qty} Units", icon="📦", delta=f"{returned_orders_pct:.1f}% Orders", delta_val=-total_ret_value)
@@ -487,50 +490,23 @@ def render_intelligence_hub_page():
 
     # --- RESTORED FINANCIAL INTEGRITY CHART ---
     # Only render if returns data is available with date column
-    returns_ready = "returns_data" in st.session_state and not st.session_state.returns_data.empty and "date" in st.session_state.returns_data.columns
+    returns_ready = not net_metrics.get("daily_financials", pd.DataFrame()).empty
 
     if returns_ready:
-        # Prepare Daily Financial Gap Data
         import plotly.graph_objects as go
-
-        daily_gross = df_exec.groupby(df_exec['order_date'].dt.date)['item_revenue'].sum().reset_index()
-        daily_gross.columns = ['date', 'gross']
-
-        # Calculate daily lost value by cross-referencing returns with sales revenue
-        ret_df_local = st.session_state.returns_data.copy()
-        ret_df_local['date'] = pd.to_datetime(ret_df_local['date']).dt.date
-
-        # Identify full returns and merge with sales to get their revenue value
-        full_returns = ret_df_local[ret_df_local["issue_type"].isin(["Paid Return", "Non Paid Return"])].copy()
-        # Ensure ID types match for merging
-        full_returns['order_id'] = full_returns['order_id'].astype(str)
-        sales_for_join = df_exec[['order_id', 'item_revenue']].copy()
-        sales_for_join['order_id'] = sales_for_join['order_id'].astype(str)
-
-        full_returns_with_val = pd.merge(full_returns, sales_for_join, on='order_id', how='left')
-
-        # Group by date for mapping
-        daily_full_loss = full_returns_with_val.groupby('date')['item_revenue'].sum().reset_index(name='val_lost')
-        daily_partial_loss = ret_df_local[ret_df_local["issue_type"] == "Partial"].groupby('date')['partial_amount'].sum().reset_index(name='part_lost')
-
-        # Merge losses
-        daily_returns = pd.merge(daily_full_loss, daily_partial_loss, on='date', how='outer').fillna(0)
-        daily_returns['total_lost'] = daily_returns['val_lost'] + daily_returns['part_lost']
-
-        # Merge for plotting
-        fin_plot = pd.merge(daily_gross, daily_returns[['date', 'total_lost']], on='date', how='left').fillna(0)
-        fin_plot['net'] = fin_plot['gross'] - fin_plot['total_lost']
-        fin_plot = fin_plot.sort_values('date')
+        fin_plot = net_metrics.get("daily_financials", pd.DataFrame()).copy()
+        fin_plot["date"] = pd.to_datetime(fin_plot["date"], errors="coerce")
+        fin_plot = fin_plot.dropna(subset=["date"]).sort_values("date")
 
         if not fin_plot.empty:
             fig_gap = go.Figure()
             fig_gap.add_trace(go.Scatter(
-                x=fin_plot['date'], y=fin_plot['gross'],
+                x=fin_plot['date'], y=fin_plot['gross_sales'],
                 fill='tonexty', mode='lines', line=dict(color='rgba(59, 130, 246, 0.4)', width=0.5),
                 name='Gross Verified', stackgroup='one'
             ))
             fig_gap.add_trace(go.Scatter(
-                x=fin_plot['date'], y=fin_plot['net'],
+                x=fin_plot['date'], y=fin_plot['net_sales'],
                 fill='tozeroy', mode='lines', line=dict(color='#10b981', width=3),
                 name='Net Settled', stackgroup='one'
             ))

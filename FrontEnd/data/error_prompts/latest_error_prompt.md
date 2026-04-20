@@ -1,9 +1,9 @@
 ### SYSTEM ERROR DETECTED FOR FIXING
 
-Context: Returns Background Load
-Error Type: KeyError
-Error: 'BackEnd.core.paths'
-Timestamp: 2026-04-20 16:50:32
+Context: Hybrid Loader - Orders Refresh
+Error Type: TypeError
+Error: Cannot setitem on a Categorical with a new category (), set the categories first
+Timestamp: 2026-04-20 17:03:45
 
 Environment:
 ```json
@@ -16,42 +16,51 @@ Environment:
 
 Additional Details:
 ```json
-{}
+{
+  "days": 30,
+  "start_date": "2026-03-21",
+  "end_date": "2026-04-20",
+  "full_sync": false
+}
 ```
 
 Traceback:
 ```python
 Traceback (most recent call last):
-  File "H:\Repo\DEEN-BI\FrontEnd\pages\dashboard.py", line 390, in _load_returns_async
-    returns_df = load_returns_data(sync_window=window, sales_df=sales_df)
-  File "C:\Users\deenb\AppData\Roaming\Python\Python314\site-packages\streamlit\runtime\caching\cache_utils.py", line 281, in __call__
-    return self._get_or_create_cached_value(args, kwargs, spinner_message)
-           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\deenb\AppData\Roaming\Python\Python314\site-packages\streamlit\runtime\caching\cache_utils.py", line 326, in _get_or_create_cached_value
-    return self._handle_cache_miss(cache, value_key, func_args, func_kwargs)
-           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\deenb\AppData\Roaming\Python\Python314\site-packages\streamlit\runtime\caching\cache_utils.py", line 385, in _handle_cache_miss
-    computed_value = self._info.func(*func_args, **func_kwargs)
-  File "H:\Repo\DEEN-BI\BackEnd\services\returns_tracker.py", line 187, in load_returns_data
-    df = cross_reference_return_items(df, sales_df)
-  File "H:\Repo\DEEN-BI\BackEnd\services\returns_tracker.py", line 331, in cross_reference_return_items
-    order_data = fetch_woocommerce_order_by_id(str(order_id))
-  File "H:\Repo\DEEN-BI\BackEnd\services\returns_tracker.py", line 203, in fetch_woocommerce_order_by_id
-    from BackEnd.services.woocommerce_service import WooCommerceService
-  File "H:\Repo\DEEN-BI\BackEnd\services\__init__.py", line 6, in <module>
-    from .customer_insights import (
-    ...<6 lines>...
+  File "H:\Repo\DEEN-BI\BackEnd\services\hybrid_data_loader.py", line 518, in refresh_woocommerce_orders_cache
+    fetched_df = ensure_sales_schema(fetched_df)
+  File "H:\Repo\DEEN-BI\BackEnd\utils\sales_schema.py", line 78, in ensure_sales_schema
+    out[text_col] = out[text_col].fillna("").astype(str).str.strip()
+                    ~~~~~~~~~~~~~~~~~~~~^^^^
+  File "C:\Users\deenb\AppData\Roaming\Python\Python314\site-packages\pandas\core\generic.py", line 7372, in fillna
+    new_data = self._mgr.fillna(
+        value=value, limit=limit, inplace=inplace, downcast=downcast
     )
-  File "H:\Repo\DEEN-BI\BackEnd\services\customer_insights.py", line 15, in <module>
-    from BackEnd.services.customer_manager import load_customer_mapping
-  File "H:\Repo\DEEN-BI\BackEnd\services\customer_manager.py", line 13, in <module>
-    from BackEnd.core.logging_config import get_logger
-  File "H:\Repo\DEEN-BI\BackEnd\core\logging_config.py", line 15, in <module>
-    from BackEnd.core.paths import LOGS_DIR
-  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
-  File "<frozen importlib._bootstrap>", line 1342, in _find_and_load_unlocked
-  File "<frozen importlib._bootstrap>", line 949, in _load_unlocked
-KeyError: 'BackEnd.core.paths'
+  File "C:\Users\deenb\AppData\Roaming\Python\Python314\site-packages\pandas\core\internals\base.py", line 186, in fillna
+    return self.apply_with_block(
+           ~~~~~~~~~~~~~~~~~~~~~^
+        "fillna",
+        ^^^^^^^^^
+    ...<5 lines>...
+        already_warned=_AlreadyWarned(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\deenb\AppData\Roaming\Python\Python314\site-packages\pandas\core\internals\managers.py", line 363, in apply
+    applied = getattr(b, f)(**kwargs)
+  File "C:\Users\deenb\AppData\Roaming\Python\Python314\site-packages\pandas\core\internals\blocks.py", line 2407, in fillna
+    new_values = self.values.fillna(value=value, method=None, limit=limit)
+  File "C:\Users\deenb\AppData\Roaming\Python\Python314\site-packages\pandas\core\arrays\_mixins.py", line 376, in fillna
+    self._validate_setitem_value(value)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\deenb\AppData\Roaming\Python\Python314\site-packages\pandas\core\arrays\categorical.py", line 1590, in _validate_setitem_value
+    return self._validate_scalar(value)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\deenb\AppData\Roaming\Python\Python314\site-packages\pandas\core\arrays\categorical.py", line 1615, in _validate_scalar
+    raise TypeError(
+    ...<2 lines>...
+    ) from None
+TypeError: Cannot setitem on a Categorical with a new category (), set the categories first
 
 ```
 

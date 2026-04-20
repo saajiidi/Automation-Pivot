@@ -724,6 +724,156 @@ def get_order_items_breakdown(order_id: str, returned_items: list[dict[str, Any]
     }
 
 
+def _estimate_sales_line_revenue(sales_df: pd.DataFrame) -> pd.Series:
+    """Estimate line revenue using the best available columns."""
+    if sales_df is None or sales_df.empty:
+        return pd.Series(dtype="float64")
+
+    qty = pd.to_numeric(sales_df.get("qty", 0), errors="coerce").fillna(0)
+
+    for col in ["item_revenue", "line_total", "total"]:
+        if col in sales_df.columns:
+            values = pd.to_numeric(sales_df[col], errors="coerce")
+            if values.notna().any() and values.sum() > 0:
+                return values.fillna(0.0)
+
+    for col in ["item_cost", "price"]:
+        if col in sales_df.columns:
+            unit_price = pd.to_numeric(sales_df[col], errors="coerce").fillna(0.0)
+            if unit_price.sum() > 0:
+                return unit_price * qty
+
+    order_total = pd.to_numeric(sales_df.get("order_total", 0), errors="coerce").fillna(0.0)
+    group_key = sales_df["order_id"] if "order_id" in sales_df.columns else pd.Series(range(len(sales_df)), index=sales_df.index)
+    qty_totals = qty.groupby(group_key).transform("sum").replace(0, 1)
+    line_counts = sales_df.groupby(group_key).cumcount() * 0 + 1
+    line_counts = line_counts.groupby(group_key).transform("sum").replace(0, 1)
+    return (order_total * (qty / qty_totals)).fillna(order_total / line_counts).fillna(order_total)
+
+
+def _normalize_match_text(value: Any) -> str:
+    """Normalize free text for loose item matching."""
+    text = str(value or "").strip().lower()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return " ".join(text.split())
+
+
+def _prepare_sales_context(sales_df: Optional[pd.DataFrame]) -> pd.DataFrame:
+    """Normalize sales rows for revenue attribution."""
+    if sales_df is None or sales_df.empty or "order_id" not in sales_df.columns:
+        return pd.DataFrame()
+
+    sales = sales_df.copy()
+    sales["order_id"] = sales["order_id"].astype(str).str.strip()
+    sales["qty"] = pd.to_numeric(sales.get("qty", 1), errors="coerce").fillna(1).clip(lower=1)
+    sales["_line_revenue"] = _estimate_sales_line_revenue(sales).fillna(0.0)
+    item_names = sales["item_name"] if "item_name" in sales.columns else pd.Series("", index=sales.index)
+    skus = sales["sku"] if "sku" in sales.columns else pd.Series("", index=sales.index)
+    sales["_item_name_norm"] = item_names.apply(_normalize_match_text)
+    sales["_sku_norm"] = skus.apply(_normalize_match_text)
+    sales["_line_key"] = sales.index.astype(str)
+    return sales
+
+
+def _match_returned_items_to_sales(row: pd.Series, order_sales: pd.DataFrame) -> Tuple[float, int, int]:
+    """Match returned items to order lines and estimate impact."""
+    items = row.get("returned_items", [])
+    if order_sales.empty or not isinstance(items, list):
+        return 0.0, 0, 0
+
+    available = order_sales.copy()
+    matched_loss = 0.0
+    matched_items = 0
+    estimated_items = 0
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        qty = int(pd.to_numeric(item.get("qty", 1), errors="coerce") or 1)
+        qty = max(qty, 1)
+        item_name = _normalize_match_text(item.get("name", ""))
+        sku = _normalize_match_text(item.get("sku", ""))
+
+        candidates = pd.DataFrame()
+        if sku and sku != "n a":
+            candidates = available[available["_sku_norm"] == sku]
+
+        if candidates.empty and item_name:
+            candidates = available[
+                available["_item_name_norm"].str.contains(item_name, na=False, regex=False)
+                | available["_item_name_norm"].apply(lambda text: item_name in text if text else False)
+            ]
+
+        if candidates.empty:
+            estimated_items += qty
+            continue
+
+        match_row = candidates.sort_values("_line_revenue", ascending=False).iloc[0]
+        matched_loss += float(match_row.get("_line_revenue", 0.0))
+        matched_items += qty
+        available = available[available["_line_key"] != match_row["_line_key"]]
+
+    return matched_loss, matched_items, estimated_items
+
+
+def _build_daily_financials(returns_df: pd.DataFrame, sales_df: Optional[pd.DataFrame]) -> pd.DataFrame:
+    """Build a day-level gross/loss/net series for charts."""
+    columns = ["date", "gross_sales", "return_loss", "partial_loss", "total_loss", "net_sales"]
+    sales_daily = pd.DataFrame(columns=["date", "gross_sales"])
+
+    if sales_df is not None and not sales_df.empty and "order_date" in sales_df.columns:
+        sales_local = sales_df.copy()
+        sales_local["order_date"] = pd.to_datetime(sales_local["order_date"], errors="coerce")
+        sales_local["_line_revenue"] = _estimate_sales_line_revenue(sales_local).fillna(0.0)
+        sales_local = sales_local.dropna(subset=["order_date"])
+        if not sales_local.empty:
+            sales_daily = (
+                sales_local.groupby(sales_local["order_date"].dt.date)["_line_revenue"]
+                .sum()
+                .reset_index(name="gross_sales")
+                .rename(columns={"order_date": "date"})
+            )
+
+    if returns_df.empty or "date" not in returns_df.columns:
+        if sales_daily.empty:
+            return pd.DataFrame(columns=columns)
+        sales_daily["return_loss"] = 0.0
+        sales_daily["partial_loss"] = 0.0
+        sales_daily["total_loss"] = 0.0
+        sales_daily["net_sales"] = sales_daily["gross_sales"]
+        return sales_daily[columns].sort_values("date")
+
+    returns_local = returns_df.copy()
+    returns_local["date"] = pd.to_datetime(returns_local["date"], errors="coerce").dt.date
+    date_keys = sorted(set(sales_daily["date"].tolist()) | set(returns_local["date"].dropna().tolist()))
+    if not date_keys:
+        return pd.DataFrame(columns=columns)
+
+    timeline = pd.DataFrame({"date": date_keys})
+    timeline = timeline.merge(sales_daily, on="date", how="left").fillna({"gross_sales": 0.0})
+
+    full_rows = returns_local[returns_local["issue_type"].isin(["Paid Return", "Non Paid Return"])]
+    partial_rows = returns_local[returns_local["issue_type"] == "Partial"]
+
+    if full_rows.empty:
+        full_daily = pd.DataFrame(columns=["date", "return_loss"])
+    else:
+        full_daily = full_rows.groupby("date")["_resolved_revenue_impact"].sum().reset_index(name="return_loss")
+
+    if partial_rows.empty:
+        partial_daily = pd.DataFrame(columns=["date", "partial_loss"])
+    else:
+        partial_daily = partial_rows.groupby("date")["_resolved_revenue_impact"].sum().reset_index(name="partial_loss")
+
+    timeline = timeline.merge(full_daily, on="date", how="left").merge(partial_daily, on="date", how="left")
+    timeline["return_loss"] = pd.to_numeric(timeline["return_loss"], errors="coerce").fillna(0.0)
+    timeline["partial_loss"] = pd.to_numeric(timeline["partial_loss"], errors="coerce").fillna(0.0)
+    timeline["total_loss"] = timeline["return_loss"] + timeline["partial_loss"]
+    timeline["net_sales"] = (timeline["gross_sales"] - timeline["total_loss"]).clip(lower=0.0)
+    return timeline[columns].sort_values("date")
+
+
 def calculate_net_sales_metrics(
     returns_df: pd.DataFrame,
     sales_df: Optional[pd.DataFrame] = None,
@@ -737,15 +887,9 @@ def calculate_net_sales_metrics(
     Returns:
         Dictionary of computed KPIs.
     """
-    gross_sales = 0.0
-    total_orders = 0
-    return_value = 0.0
-
-    if sales_df is not None and not sales_df.empty:
-        if "item_revenue" in sales_df.columns:
-            gross_sales = pd.to_numeric(sales_df["item_revenue"], errors="coerce").sum()
-        if "order_id" in sales_df.columns:
-            total_orders = sales_df["order_id"].nunique()
+    sales_context = _prepare_sales_context(sales_df)
+    gross_sales = float(pd.to_numeric(sales_context.get("_line_revenue", 0.0), errors="coerce").fillna(0.0).sum()) if not sales_context.empty else 0.0
+    total_orders = int(sales_context["order_id"].nunique()) if not sales_context.empty else 0
 
     if returns_df.empty:
         return {
@@ -756,26 +900,64 @@ def calculate_net_sales_metrics(
             "gross_sales": gross_sales,
             "total_orders": total_orders,
             "return_value_extracted": 0.0,
-            "net_sales": gross_sales, # If no returns, net = gross
+            "full_return_loss": 0.0,
+            "partial_loss": 0.0,
+            "total_loss": 0.0,
+            "net_sales": gross_sales,
+            "net_yield_pct": 100.0 if gross_sales > 0 else 0.0,
+            "attribution_confidence_pct": 0.0,
+            "attributed_issue_orders": 0,
+            "unattributed_issue_orders": 0,
+            "matched_returned_items": 0,
+            "estimated_returned_items": 0,
+            "daily_financials": _build_daily_financials(pd.DataFrame(), sales_context),
             "return_rate": 0.0,
         }
 
-    if sales_df is not None and not sales_df.empty:
-        if "order_id" in sales_df.columns:
-            # Map returns to WooCommerce to extract full return value
-            return_orders = returns_df[returns_df["issue_type"].isin(["Paid Return", "Non Paid Return"])]["order_id"].unique()
-            sales_unique = sales_df.drop_duplicates(subset=["order_id"]).copy()
-            sales_unique["str_id"] = sales_unique["order_id"].astype(str)
-            
-            matched = sales_unique[sales_unique["str_id"].isin(return_orders)]
-            if "order_total" in matched.columns:
-                return_value = pd.to_numeric(matched["order_total"], errors="coerce").sum()
-            elif "item_revenue" in sales_df.columns:
-                matched_items = sales_df[sales_df["order_id"].astype(str).isin(return_orders)]
-                return_value = pd.to_numeric(matched_items["item_revenue"], errors="coerce").sum()
-
     # Deduplicate by normalized order_id for counting unique orders
-    unique_orders = returns_df.drop_duplicates(subset=["order_id"])
+    unique_orders = returns_df.drop_duplicates(subset=["order_id"]).copy()
+    unique_orders["_resolved_revenue_impact"] = 0.0
+    unique_orders["_impact_source"] = "unattributed"
+    unique_orders["_matched_item_qty"] = 0
+    unique_orders["_estimated_item_qty"] = 0
+
+    order_totals = (
+        sales_context.groupby("order_id")["_line_revenue"].sum().to_dict()
+        if not sales_context.empty else {}
+    )
+
+    for idx, row in unique_orders.iterrows():
+        order_id = str(row.get("order_id", "")).strip()
+        issue_type = row.get("issue_type", "Unknown")
+        order_sales = sales_context[sales_context["order_id"] == order_id] if not sales_context.empty else pd.DataFrame()
+        matched_loss, matched_items, estimated_items = _match_returned_items_to_sales(row, order_sales)
+        order_total = float(order_totals.get(order_id, 0.0))
+        partial_amount = float(pd.to_numeric(row.get("partial_amount", 0.0), errors="coerce") or 0.0)
+
+        resolved_impact = 0.0
+        impact_source = "unattributed"
+
+        if issue_type in ["Paid Return", "Non Paid Return"]:
+            if matched_loss > 0:
+                resolved_impact = matched_loss
+                impact_source = "item_match"
+            elif order_total > 0:
+                resolved_impact = order_total
+                impact_source = "order_fallback"
+        elif issue_type == "Partial":
+            if partial_amount > 0:
+                resolved_impact = partial_amount
+                impact_source = "partial_amount"
+            elif matched_loss > 0:
+                resolved_impact = matched_loss
+                impact_source = "item_match"
+        elif issue_type == "Exchange":
+            impact_source = "exchange"
+
+        unique_orders.at[idx, "_resolved_revenue_impact"] = float(resolved_impact)
+        unique_orders.at[idx, "_impact_source"] = impact_source
+        unique_orders.at[idx, "_matched_item_qty"] = int(matched_items)
+        unique_orders.at[idx, "_estimated_item_qty"] = int(estimated_items)
 
     # ── Counts ──
     return_mask = unique_orders["issue_type"].isin(["Paid Return", "Non Paid Return"])
@@ -864,27 +1046,16 @@ def calculate_net_sales_metrics(
 
     # ── Calculate Revenue Impact from Cross-Referenced Items ──
     # Sum up revenue impact from enhanced item data
-    total_return_revenue_impact = 0.0
-    total_exchange_revenue_impact = 0.0
-    total_partial_revenue_impact = 0.0
-
-    for items in returns_df["returned_items"]:
-        if isinstance(items, list):
-            for item in items:
-                if isinstance(item, dict):
-                    transaction_type = item.get("transaction_type", "")
-                    revenue_impact = item.get("revenue_impact", 0)
-
-                    if transaction_type == "full_return":
-                        total_return_revenue_impact += revenue_impact
-                    elif transaction_type == "exchange":
-                        total_exchange_revenue_impact += revenue_impact
-                    elif transaction_type == "partial_return":
-                        total_partial_revenue_impact += revenue_impact
-
-    # Use cross-referenced value if available, otherwise fall back to extracted value
-    if total_return_revenue_impact > 0:
-        return_value = total_return_revenue_impact
+    full_return_loss = float(unique_orders.loc[return_mask, "_resolved_revenue_impact"].sum())
+    partial_loss = float(unique_orders.loc[partial_mask, "_resolved_revenue_impact"].sum())
+    exchange_revenue_impact = float(unique_orders.loc[exchange_mask, "_resolved_revenue_impact"].sum())
+    total_loss = full_return_loss + partial_loss
+    financial_issue_orders = int((return_mask | partial_mask).sum())
+    attributed_orders = int(unique_orders.loc[return_mask | partial_mask, "_impact_source"].ne("unattributed").sum())
+    attribution_confidence_pct = (attributed_orders / financial_issue_orders * 100) if financial_issue_orders > 0 else 0.0
+    matched_returned_items = int(unique_orders["_matched_item_qty"].sum())
+    estimated_returned_items = int(unique_orders["_estimated_item_qty"].sum())
+    daily_financials = _build_daily_financials(unique_orders, sales_context)
 
     metrics = {
         "total_issues": len(unique_orders),
@@ -903,11 +1074,21 @@ def calculate_net_sales_metrics(
         "monthly_by_type": monthly_by_type,
         "gross_sales": gross_sales,
         "total_orders": total_orders,
-        "return_value_extracted": return_value,
-        "return_revenue_impact": round(total_return_revenue_impact, 2),
-        "exchange_revenue_impact": round(total_exchange_revenue_impact, 2),
-        "partial_revenue_impact": round(total_partial_revenue_impact, 2),
-        "net_sales": max(0.0, gross_sales - return_value - partial_amounts),
+        "return_value_extracted": round(full_return_loss, 2),
+        "full_return_loss": round(full_return_loss, 2),
+        "return_revenue_impact": round(full_return_loss, 2),
+        "exchange_revenue_impact": round(exchange_revenue_impact, 2),
+        "partial_revenue_impact": round(partial_loss, 2),
+        "partial_loss": round(partial_loss, 2),
+        "total_loss": round(total_loss, 2),
+        "net_sales": max(0.0, gross_sales - total_loss),
+        "net_yield_pct": round(((gross_sales - total_loss) / gross_sales * 100), 2) if gross_sales > 0 else 0.0,
+        "attribution_confidence_pct": round(attribution_confidence_pct, 1),
+        "attributed_issue_orders": attributed_orders,
+        "unattributed_issue_orders": max(0, financial_issue_orders - attributed_orders),
+        "matched_returned_items": matched_returned_items,
+        "estimated_returned_items": estimated_returned_items,
+        "daily_financials": daily_financials,
     }
 
     # ── Return rate ──

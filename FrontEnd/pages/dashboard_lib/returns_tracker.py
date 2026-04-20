@@ -37,11 +37,12 @@ def render_returns_tracker_page() -> None:
     )
 
     # ── Auto Data Sync ──
+    sales_df = _get_gross_sales_context()
     sync_window = get_current_sync_window()
     if "returns_data" not in st.session_state or st.session_state.get("last_returns_sync") != sync_window:
         try:
             with st.spinner("Syncing delivery-issue data (Scheduled)..."):
-                df_returns = load_returns_data(sync_window=sync_window)
+                df_returns = load_returns_data(sync_window=sync_window, sales_df=sales_df)
                 st.session_state.returns_data = df_returns
                 st.session_state.last_returns_sync = sync_window
         except Exception as e:
@@ -68,6 +69,7 @@ def render_returns_tracker_page() -> None:
 
     # ── KPI Cards ──
     _render_kpi_cards(metrics)
+    _render_financial_impact_summary(metrics)
 
     if df.empty:
         st.info("No returns logged within this specific time frame.")
@@ -241,6 +243,52 @@ def _render_kpi_cards(metrics: dict) -> None:
             "#8b5cf6"
         ), unsafe_allow_html=True)
 
+
+
+def _render_financial_impact_summary(metrics: dict) -> None:
+    """Render decision-ready financial impact cards."""
+    st.markdown("#### ðŸ’° True Revenue & Financial Impact")
+    cols = st.columns(4)
+
+    with cols[0]:
+        st.markdown(_kpi_card(
+            "ðŸ’µ GROSS SALES",
+            f"à§³{metrics.get('gross_sales', 0):,.0f}",
+            f"{metrics.get('total_orders', 0):,} tracked orders",
+            "#2563eb"
+        ), unsafe_allow_html=True)
+
+    with cols[1]:
+        st.markdown(_kpi_card(
+            "ðŸ”» FULL RETURN LOSS",
+            f"à§³{metrics.get('full_return_loss', metrics.get('return_value_extracted', 0)):,.0f}",
+            f"{metrics.get('return_count', 0)} returned orders",
+            "#dc2626"
+        ), unsafe_allow_html=True)
+
+    with cols[2]:
+        st.markdown(_kpi_card(
+            "ðŸŸ¡ PARTIAL LOSS",
+            f"à§³{metrics.get('partial_loss', metrics.get('partial_amounts', 0)):,.0f}",
+            f"{metrics.get('partial_count', 0)} partial cases",
+            "#d97706"
+        ), unsafe_allow_html=True)
+
+    with cols[3]:
+        st.markdown(_kpi_card(
+            "âœ¨ NET SETTLED",
+            f"à§³{metrics.get('net_sales', 0):,.0f}",
+            f"{metrics.get('net_yield_pct', 0):.1f}% net yield",
+            "#059669"
+        ), unsafe_allow_html=True)
+
+    confidence = metrics.get("attribution_confidence_pct", 0.0)
+    matched_items = metrics.get("matched_returned_items", 0)
+    estimated_items = metrics.get("estimated_returned_items", 0)
+    st.caption(
+        f"Financial attribution confidence: {confidence:.1f}% | "
+        f"Matched returned items: {matched_items:,} | Unmatched/estimated items: {estimated_items:,}"
+    )
 
 
 def _kpi_card(label: str, value: str, subtitle: str, color: str) -> str:
