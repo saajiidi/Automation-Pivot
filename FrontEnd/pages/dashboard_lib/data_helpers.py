@@ -65,7 +65,7 @@ def build_order_level_dataset(df: pd.DataFrame) -> pd.DataFrame:
         order_rows = order_rows.sort_values("order_date", ascending=True)
         
         # Identify non-numeric columns to use 'first' (picking non-null)
-        meta_cols = ["order_date", "customer_key", "customer_name", "order_status", "source", "city", "state"]
+        meta_cols = ["order_date", "shipped_date", "customer_key", "customer_name", "order_status", "source", "city", "state"]
         
         # Core aggregations (Vectorized)
         aggregations = {
@@ -82,8 +82,11 @@ def build_order_level_dataset(df: pd.DataFrame) -> pd.DataFrame:
         # Group metadata (Picking the first non-null/non-empty value per order)
         # We can optimize this by replacing empty strings with pd.NA first
         meta_df = order_rows[["order_id"] + meta_cols].copy()
+        # Only clean string columns (not datetime columns)
+        datetime_cols = {"order_date", "shipped_date"}
         for col in meta_cols:
-             meta_df[col] = meta_df[col].astype(str).str.strip().replace(["", "nan", "None", "NaN"], pd.NA)
+            if col not in datetime_cols:
+                meta_df[col] = meta_df[col].astype(str).str.strip().replace(["", "nan", "None", "NaN"], pd.NA)
         
         meta_grouped = meta_df.groupby("order_id", as_index=False).first().fillna("")
         
