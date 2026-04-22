@@ -9,10 +9,31 @@ from BackEnd.core.sync import load_shared_gsheet
 from BackEnd.data.normalized_sales import normalize_sales_dataframe
 
 CORE_WORKBOOK_PATH = DATA_DIR / "TotalOrder_TillLastTime.xlsx"
+CORE_PARQUET_SNAPSHOT_PATH = DATA_DIR / "TotalOrder_TillLastTime.parquet"
 MASTER_CACHE_FILE = CACHE_DIR / "historical_master.parquet"
 
 
 def load_master_sales_dataset(force_refresh: bool = False) -> tuple[pd.DataFrame | None, str]:
+    if not force_refresh and MASTER_CACHE_FILE.exists():
+        try:
+            cached = pd.read_parquet(MASTER_CACHE_FILE)
+            if not cached.empty and not CORE_WORKBOOK_PATH.exists():
+                return cached, f"Fallback cache in use ({CORE_WORKBOOK_PATH.name} missing)"
+        except Exception:
+            pass
+
+    if not CORE_WORKBOOK_PATH.exists() and CORE_PARQUET_SNAPSHOT_PATH.exists():
+        try:
+            snapshot_df = pd.read_parquet(CORE_PARQUET_SNAPSHOT_PATH)
+            if not snapshot_df.empty:
+                try:
+                    snapshot_df.to_parquet(MASTER_CACHE_FILE, index=False)
+                except Exception:
+                    pass
+                return snapshot_df, f"Local Parquet snapshot loaded ({len(snapshot_df):,} rows)"
+        except Exception:
+            pass
+
     if not CORE_WORKBOOK_PATH.exists():
         return None, f"Core workbook not found: {CORE_WORKBOOK_PATH.name}"
 
@@ -51,7 +72,7 @@ def load_master_sales_dataset(force_refresh: bool = False) -> tuple[pd.DataFrame
         pass
 
     msg = (
-        f"Core workbook loaded: {info['base_rows']:,} rows"
+        f"Workbook core loaded: {info['base_rows']:,} rows"
         f" across {info['sheet_count']} tabs"
         f" + {len(delta_df):,} new 2026 rows"
     )

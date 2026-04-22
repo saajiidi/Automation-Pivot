@@ -122,7 +122,7 @@ def render_district_map(df_sales: pd.DataFrame):
         )
     )
 
-        st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
     
     with gv2:
         st.markdown(f"#### 🔥 Top 20 Hotspots")

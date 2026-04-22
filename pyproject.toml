@@ -33,6 +33,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "XlsxWriter>=3.2.9",
     "pyarrow>=19.0.0",
+    "gcsfs>=2025.3.0",
     "Pillow>=11.2.1",
     "beautifulsoup4>=4.14.3",
     # Database and WooCommerce

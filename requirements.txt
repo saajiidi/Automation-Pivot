@@ -3,11 +3,10 @@ pandas>=2.2.3
 plotly>=6.0.0
 requests>=2.32.3
 pyarrow>=19.0.0
-fastparquet>=2024.11.0
+gcsfs>=2025.3.0
 fuzzywuzzy>=0.18.0
 python-Levenshtein>=0.27.3
 duckdb>=1.5.1
-anthropic>=0.89.0
 openpyxl>=3.1.5
 xlsxwriter>=3.2.9
 # Core Data & ML

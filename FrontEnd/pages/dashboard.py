@@ -1,48 +1,28 @@
 """Optimized Main Dashboard Controller using a modular library structure."""
 
 from __future__ import annotations
-from datetime import date, timedelta, datetime
-import pandas as pd
-import numpy as np
-import streamlit as st
 
-from BackEnd.services.customer_insights import generate_customer_insights_from_sales
+import base64
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+import pandas as pd
+import streamlit as st
+from streamlit_autorefresh import st_autorefresh
+
 from BackEnd.services.hybrid_data_loader import (
     get_woocommerce_orders_cache_status,
-    load_hybrid_data,
     load_cached_woocommerce_stock_data,
+    load_hybrid_data,
     start_orders_background_refresh,
 )
-from BackEnd.services.ml_insights import build_ml_insight_bundle
 from FrontEnd.components import ui
-from FrontEnd.utils.error_handler import log_error
-
-# Modular Library Imports
 from .dashboard_lib.data_helpers import (
-    prune_dataframe, 
-    build_order_level_dataset, 
-    sum_order_level_revenue, 
     apply_global_filters,
-    get_available_filters
-)
-from BackEnd.core.categories import get_master_category_list, format_category_label, get_subcategory_name
-from .dashboard_lib.story import render_dashboard_story
-from .dashboard_lib.bi_analytics import (
-    render_today_vs_last_day_sales_chart,
-    render_last_7_days_sales_chart,
-    render_sales_overview_timeseries
-)
-from .dashboard_lib.trends import render_sales_trends
-from .dashboard_lib.performance import render_product_performance
-from .dashboard_lib.inventory import render_inventory_health
-from .dashboard_lib.deep_dive import render_deep_dive_tab
-from .dashboard_lib.audit import render_data_audit, render_data_trust_panel
-from .dashboard_lib.acquisition import render_acquisition_analytics
-from .dashboard_lib.operations import render_operational_health
-from BackEnd.services.customer_insights import generate_cohort_matrix
-from .dashboard_lib.customer_insight_page import (
-    render_customer_insight_page,
-    render_enhanced_customer_insight_tab,
+    build_order_level_dataset,
+    estimate_line_revenue,
+    prune_dataframe,
+    sum_order_level_revenue,
 )
 
 DASHBOARD_SALES_COLUMNS = [
@@ -51,53 +31,70 @@ DASHBOARD_SALES_COLUMNS = [
     "item_revenue", "line_total", "item_cost", "price", "sku", "Category", "Coupons"
 ]
 
-# Internal Page Logic will be appended below
+# Backwards-compatible aliases for tests and older imports.
+_build_order_level_dataset = build_order_level_dataset
+_estimate_line_revenue = estimate_line_revenue
+_sum_order_level_revenue = sum_order_level_revenue
 
-def render_intelligence_hub_page():
-    import os
-    import base64
-    banner_path = os.path.join("FrontEnd", "assets", "data_analytics_banner.png")
-    
-    if os.path.exists(banner_path):
-        with open(banner_path, "rb") as image_file:
-            encoded_string = base64.b64encode(image_file.read()).decode()
-        
+SECTIONS_REQUIRING_CUSTOMERS = {"💎 Sales Overview", "👥 Customer Insight", "🚀 Data Pilot"}
+SECTIONS_REQUIRING_ML = {"💎 Sales Overview", "📦 Stock Insight"}
+SECTIONS_REQUIRING_STOCK = {"📥 Sales Data Ingestion", "📦 Stock Insight", "🚀 Data Pilot"}
+
+
+@st.cache_data(show_spinner=False)
+def _load_banner_base64() -> str | None:
+    banner_path = Path(__file__).resolve().parents[1] / "assets" / "data_analytics_banner.png"
+    if not banner_path.exists():
+        return None
+    return base64.b64encode(banner_path.read_bytes()).decode("ascii")
+
+
+def _render_banner():
+    encoded_string = _load_banner_base64()
+    if not encoded_string:
         st.markdown(
-            f'''
-            <div style="position: relative; margin-bottom: 25px; border-radius: 12px; overflow: hidden; height: 160px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 6px 16px rgba(0,0,0,0.3);">
-                <img src="data:image/png;base64,{encoded_string}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.8;">
-                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0) 100%); display: flex; flex-direction: column; justify-content: center; padding-left: 30px;">
-                    <h1 style="color: white; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -1px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">
-                        DEEN <span style="color: #3b82f6;">Business Intelligence</span>
-                    </h1>
-                    <div style="display: flex; align-items: center; margin-top: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); padding: 4px 12px; border-radius: 20px; width: fit-content;">
-                        <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-right: 10px; box-shadow: 0 0 10px #10b981; animation: pulse 2s infinite;"></div>
-                        <span style="color: #10b981; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">System Online | Intelligence Hub Active</span>
-                    </div>
+            '<div class="live-indicator"><span class="live-dot"></span>System Online | Intelligence Hub Active</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    st.markdown(
+        f"""
+        <div style="position: relative; margin-bottom: 25px; border-radius: 12px; overflow: hidden; height: 160px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 6px 16px rgba(0,0,0,0.3);">
+            <img src="data:image/png;base64,{encoded_string}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.8;">
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0) 100%); display: flex; flex-direction: column; justify-content: center; padding-left: 30px;">
+                <h1 style="color: white; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -1px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">
+                    DEEN <span style="color: #3b82f6;">Business Intelligence</span>
+                </h1>
+                <div style="display: flex; align-items: center; margin-top: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); padding: 4px 12px; border-radius: 20px; width: fit-content;">
+                    <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-right: 10px; box-shadow: 0 0 10px #10b981; animation: pulse 2s infinite;"></div>
+                    <span style="color: #10b981; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">System Online | Intelligence Hub Active</span>
                 </div>
             </div>
-            <style>
-                @keyframes pulse {{
-                    0% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }}
-                    70% {{ transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }}
-                    100% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }}
-                }}
-            </style>
-            ''',
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown('<div class="live-indicator"><span class="live-dot"></span>System Online | Intelligence Hub Active</div>', unsafe_allow_html=True)
-    global_sync = st.session_state.get("global_sync_request", False)
-    if global_sync:
-        st.session_state["global_sync_request"] = False # Reset
-        
-    # 1. Map Time Window to Query Range
-    window = st.session_state.get("time_window", "Last Month")
-    
+        </div>
+        <style>
+            @keyframes pulse {{
+                0% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }}
+                70% {{ transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }}
+                100% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }}
+            }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _serialize_context_value(value) -> str:
+    if isinstance(value, (list, tuple, set)):
+        return ",".join(str(item) for item in value)
+    return str(value)
+
+
+def _get_window_config(window: str) -> dict[str, str | int | date]:
     today = date.today()
-    start_dt = end_dt = today
-    
+    start_dt = today
+    end_dt = today
+
     if window == "MTD":
         days_back = (today - today.replace(day=1)).days
     elif window == "YTD":
@@ -105,13 +102,7 @@ def render_intelligence_hub_page():
     elif window == "Custom Date Range":
         start_dt = st.session_state.get("wc_sync_start_date", today)
         end_dt = st.session_state.get("wc_sync_end_date", today)
-        
-        # Calculate duration for delta comparisons
         days_back = (end_dt - start_dt).days
-        
-        # Construct ISO strings with full-day coverage
-        start_date_str = f"{start_dt}T00:00:00"
-        end_date_str = f"{end_dt}T23:59:59"
     else:
         window_map = {
             "Last Day": 1,
@@ -123,239 +114,331 @@ def render_intelligence_hub_page():
             "Last Quarter": 90,
             "Last Half Year": 180,
             "Last 9 Months": 270,
-            "Last Year": 365
+            "Last Year": 365,
         }
         days_back = window_map.get(window, 30)
-    
+        start_dt = today - timedelta(days=days_back)
+        end_dt = today
+
     if window == "Custom Date Range":
-        end_date_str = end_dt.strftime("%Y-%m-%d")
-        start_date_str = start_dt.strftime("%Y-%m-%d")
         duration = max(1, days_back)
         prev_end_date_str = (start_dt - timedelta(days=1)).strftime("%Y-%m-%d")
         prev_start_date_str = (start_dt - timedelta(days=duration)).strftime("%Y-%m-%d")
     else:
-        # Calculate proper date range for ALL window types
-        end_dt = today
-        start_dt = today - timedelta(days=days_back)
-        end_date_str = end_dt.strftime("%Y-%m-%d")
-        start_date_str = start_dt.strftime("%Y-%m-%d")
         prev_start_date_str = (today - timedelta(days=days_back * 2)).strftime("%Y-%m-%d")
         prev_end_date_str = (today - timedelta(days=days_back + 1)).strftime("%Y-%m-%d")
 
-    orders_status = get_woocommerce_orders_cache_status(start_date_str, end_date_str)
+    return {
+        "days_back": max(1, days_back),
+        "start_dt": start_dt,
+        "end_dt": end_dt,
+        "start_date_str": start_dt.strftime("%Y-%m-%d"),
+        "end_date_str": end_dt.strftime("%Y-%m-%d"),
+        "prev_start_date_str": prev_start_date_str,
+        "prev_end_date_str": prev_end_date_str,
+    }
 
-    # === SKELETON LOADING: Render UI instantly while data loads ===
-    cache_empty = not orders_status.get("cache_exists", False)
-    data_load_key = f"data_loaded_{start_date_str}_{end_date_str}"
-    data_ready = st.session_state.get(data_load_key, False)
 
-    if cache_empty and not data_ready:
-        # Render skeleton UI immediately for fast perceived performance
-        st.markdown("""
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 12px 16px; background: linear-gradient(90deg, rgba(59,130,246,0.1) 0%, rgba(59,130,246,0.05) 100%); border-left: 3px solid #3b82f6; border-radius: 8px;">
-                <span style="animation: spin 1s linear infinite;">🔄</span>
-                <div>
-                    <div style="font-weight: 600; color: #3b82f6; font-size: 0.9rem;">Initializing Data Stream...</div>
-                    <div style="font-size: 0.75rem; color: #64748b;">Connecting to WooCommerce API. Dashboard will populate automatically.</div>
-                </div>
+def _needs_category_enrichment(categories: list[str]) -> bool:
+    return bool(categories and "All" not in categories)
+
+
+def _ensure_categories(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    if "Category" in df.columns and df["Category"].notna().any():
+        return df
+
+    from BackEnd.core.categories import get_category_for_sales
+
+    enriched = df.copy()
+    enriched["Category"] = enriched["item_name"].apply(get_category_for_sales)
+    return enriched
+
+
+def _filter_stock_by_categories(stock_df: pd.DataFrame, categories: list[str]) -> pd.DataFrame:
+    if stock_df.empty or not _needs_category_enrichment(categories):
+        return stock_df
+
+    mask = pd.Series(False, index=stock_df.index)
+    for category in categories:
+        mask |= stock_df["Category"].str.startswith(category, na=False)
+    return stock_df[mask]
+
+
+def _render_initial_sync_placeholder(start_date_str: str, end_date_str: str, status_message: str):
+    st.markdown(
+        """
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 12px 16px; background: linear-gradient(90deg, rgba(59,130,246,0.1) 0%, rgba(59,130,246,0.05) 100%); border-left: 3px solid #3b82f6; border-radius: 8px;">
+            <span style="animation: spin 1s linear infinite;">🔄</span>
+            <div>
+                <div style="font-weight: 600; color: #3b82f6; font-size: 0.9rem;">Initializing Data Stream...</div>
+                <div style="font-size: 0.75rem; color: #64748b;">First-time WooCommerce sync is building the local cache in the background.</div>
             </div>
-            <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-        """, unsafe_allow_html=True)
+        </div>
+        <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+        """,
+        unsafe_allow_html=True,
+    )
+    ui.skeleton_row(count=6)
+    st.markdown("<br>", unsafe_allow_html=True)
+    ui.skeleton_row(count=6)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.caption(status_message)
+    st_autorefresh(interval=3000, limit=40, key=f"orders_bootstrap_{start_date_str}_{end_date_str}")
 
-        # Show skeleton metrics row
-        ui.skeleton_row(count=6)
-        st.markdown("<br>", unsafe_allow_html=True)
-        ui.skeleton_row(count=6)
-        st.markdown("<br>", unsafe_allow_html=True)
 
-        # Trigger data load and rerun
-        st.session_state[data_load_key] = False
-        st.session_state[f"{data_load_key}_loading"] = True
-        st.rerun()
+def _build_core_dashboard_data(
+    *,
+    window: str,
+    window_config: dict[str, str | int | date],
+    global_sync: bool,
+    active_snapshot_mode: bool,
+    needs_history: bool,
+    orders_status: dict,
+    global_cats: list[str],
+    global_stats: list[str],
+) -> dict | None:
+    from FrontEnd.utils.config import SNAPSHOT_LABEL
 
-    needs_history = window == "Custom Date Range" and not orders_status.get("is_covered", True)
+    cache_empty = not orders_status.get("cache_exists", False)
+
     if needs_history:
-        st.warning(f"⏳ Connecting to WooCommerce Live to sync deep archival history ({start_date_str} to {end_date_str}). This runs seamlessly in the background and may take a few minutes. Your metrics will automatically populate once caching finishes!")
-    from FrontEnd.utils.config import USE_STATIC_SNAPSHOT, SNAPSHOT_DATE, SNAPSHOT_LABEL, MAP_FORCE_SNAPSHOT
-    
-    # Determine Snapshot mode based on configuration OR manual user override (Slow Connection)
-    slow_conn = st.session_state.get("conn_speed_mode") == "Slow Connection"
-    active_snapshot_mode = USE_STATIC_SNAPSHOT or slow_conn
-    
-    # === DATA LOADING: Load actual data (cache hit or fresh fetch) ===
-    # Skeleton UI already rendered above if cache was empty
-    data_load_key = f"data_loaded_{start_date_str}_{end_date_str}"
+        st.warning(
+            f"⏳ Connecting to WooCommerce Live to sync deep archival history "
+            f"({window_config['start_date_str']} to {window_config['end_date_str']}). "
+            "This runs in the background and may take a few minutes."
+        )
 
     if active_snapshot_mode:
         st.info(f"📶 **{SNAPSHOT_LABEL}**: Performance optimized for slow connections. Real-time syncing is paused.")
-        df_sales_raw = load_hybrid_data(woocommerce_mode="cache_only", use_snapshot=True)
-        df_sales_raw = prune_dataframe(df_sales_raw, DASHBOARD_SALES_COLUMNS)
-    else:
-        # Standard Live Logic
-        should_force = global_sync or (window == "Last Day") or needs_history or cache_empty
-
-        # Start background refresh for freshness
-        start_orders_background_refresh(start_date_str, end_date_str, force=should_force)
-
-        # Load data (cached or fresh based on mode)
-        sync_mode = "live" if (window == "Last Day" or global_sync) else "cache_only"
         df_sales_raw = prune_dataframe(
-            load_hybrid_data(start_date=start_date_str, end_date=end_date_str, woocommerce_mode=sync_mode),
-            DASHBOARD_SALES_COLUMNS
+            load_hybrid_data(woocommerce_mode="cache_only", use_snapshot=True),
+            DASHBOARD_SALES_COLUMNS,
+        )
+    else:
+        should_force = global_sync or (window == "Last Day") or needs_history or cache_empty
+        refresh_started = start_orders_background_refresh(
+            window_config["start_date_str"],
+            window_config["end_date_str"],
+            force=should_force,
         )
 
-    # Mark data as ready for future renders
-    st.session_state[data_load_key] = True
-    st.session_state[f"{data_load_key}_loading"] = False
-    
-    # 1. Map categories and apply global filters immediately for UI context
-    from BackEnd.core.categories import get_category_for_sales
-    
-    if "Category" not in df_sales_raw.columns:
-        df_sales_raw["Category"] = df_sales_raw["item_name"].apply(get_category_for_sales)
-    
-    # Load Previous Context (Archival comparison range)
-    df_prev_raw = load_hybrid_data(start_date=prev_start_date_str, end_date=prev_end_date_str, woocommerce_mode="cache_only")
-    df_prev_raw = prune_dataframe(df_prev_raw, DASHBOARD_SALES_COLUMNS)
-    df_prev_raw["Category"] = df_prev_raw["item_name"].apply(get_category_for_sales)
-    
-    global_cats = st.session_state.get("global_categories", ["All"])
-    global_stats = st.session_state.get("global_statuses", ["All"])
-    
-    # Store Raw Date-Ranged Data before global category/status filtering
-    df_sales_full = df_sales_raw.copy() 
+        if cache_empty:
+            if refresh_started or orders_status.get("is_running"):
+                _render_initial_sync_placeholder(
+                    window_config["start_date_str"],
+                    window_config["end_date_str"],
+                    orders_status.get("status_message", "First WooCommerce sync is running in the background."),
+                )
+                return None
+
+            with st.spinner("Running first WooCommerce sync..."):
+                df_sales_raw = prune_dataframe(
+                    load_hybrid_data(
+                        start_date=window_config["start_date_str"],
+                        end_date=window_config["end_date_str"],
+                        woocommerce_mode="live",
+                    ),
+                    DASHBOARD_SALES_COLUMNS,
+                )
+        else:
+            sync_mode = "live" if (window == "Last Day" or global_sync) else "cache_only"
+            df_sales_raw = prune_dataframe(
+                load_hybrid_data(
+                    start_date=window_config["start_date_str"],
+                    end_date=window_config["end_date_str"],
+                    woocommerce_mode=sync_mode,
+                ),
+                DASHBOARD_SALES_COLUMNS,
+            )
+
+    df_prev_raw = prune_dataframe(
+        load_hybrid_data(
+            start_date=window_config["prev_start_date_str"],
+            end_date=window_config["prev_end_date_str"],
+            woocommerce_mode="cache_only",
+        ),
+        DASHBOARD_SALES_COLUMNS,
+    )
+
+    if _needs_category_enrichment(global_cats):
+        df_sales_raw = _ensure_categories(df_sales_raw)
+        df_prev_raw = _ensure_categories(df_prev_raw)
+
+    df_sales_full = df_sales_raw.copy()
     df_prev_full = df_prev_raw.copy()
-    
-    # v10.2: Ensure robust item-level revenue estimation
-    from .dashboard_lib.data_helpers import estimate_line_revenue
-    # Apply estimation to full datasets so it persists
     df_sales_full["item_revenue"] = estimate_line_revenue(df_sales_full)
     df_prev_full["item_revenue"] = estimate_line_revenue(df_prev_full)
-    
-    # Update current filtered sets with calculated revenue
+
     df_sales_filtered = apply_global_filters(df_sales_full, global_cats, global_stats)
     df_prev_filtered = apply_global_filters(df_prev_full, global_cats, global_stats)
 
-    # 1.5 Geographic Intelligence (District Code Resolution)
-    from BackEnd.core.geo import get_region_display
-    df_sales_full["_region_display"] = df_sales_full.apply(lambda x: get_region_display(x.get("city", ""), x.get("state", "")), axis=1)
-    df_prev_full["_region_display"] = df_prev_full.apply(lambda x: get_region_display(x.get("city", ""), x.get("state", "")), axis=1)
-        
-    # --- HYBRID MAP DATA: The map ALWAYS uses a clean snapshot to save memory ---
-    if MAP_FORCE_SNAPSHOT:
-        df_sales_map = load_hybrid_data(use_snapshot=True)
-        # Apply categories to map snapshot if missing
-        if "Category" not in df_sales_map.columns:
-            from BackEnd.core.categories import get_category_for_sales
-            df_sales_map["Category"] = df_sales_map["item_name"].apply(get_category_for_sales)
-    else:
-        df_sales_map = df_sales_filtered
-
-    # Fetch pre-calculated ML bundle if in snapshot mode, else build it
-    if active_snapshot_mode:
-        from BackEnd.services.hybrid_data_loader import load_static_ml_bundle
-        ml_bundle = load_static_ml_bundle()
-    else:
-        ml_bundle = None # Will be built below
-    
-    # 2. Status Filtering Layers (Derived from Sidebar Filtered Sets)
-    # - Strict: For financial/secure analytics (Completed/Shipped)
-    # - Active: For operational overview (Excluding Cancelled/Failed)
     valid_statuses = ["completed", "shipped"]
     exclude_statuses = ["cancelled", "failed", "trash"]
-    
-    # Define Datasets (Using _filtered to respect sidebar)
-    # a) Secure Set (Strict)
+
     df_sales_strict = df_sales_filtered[df_sales_filtered["order_status"].str.lower().isin(valid_statuses)].copy()
     df_prev_strict = df_prev_filtered[df_prev_filtered["order_status"].str.lower().isin(valid_statuses)].copy()
-    
-    # b) Active Set (Loose - Used for overall revenue/volume reporting)
     df_sales_active = df_sales_filtered[~df_sales_filtered["order_status"].str.lower().isin(exclude_statuses)].copy()
     df_prev_active = df_prev_filtered[~df_prev_filtered["order_status"].str.lower().isin(exclude_statuses)].copy()
 
-    if not active_snapshot_mode:
-        df_customers = generate_customer_insights_from_sales(df_sales_strict, include_rfm=True)
-        ml_bundle = build_ml_insight_bundle(df_sales_strict, df_customers, horizon_days=7)
-    else:
-        # Snapshot mode provides these
-        if ml_bundle and "customers" in ml_bundle: # if bundle includes it
-            df_customers = ml_bundle["customers"]
-        else:
-            df_customers = generate_customer_insights_from_sales(df_sales_strict, include_rfm=True)
-    
     stock_df = load_cached_woocommerce_stock_data()
-    if stock_df.empty and not active_snapshot_mode:
-        with st.spinner("📦 Syncing Inventory levels..."):
-             from BackEnd.services.hybrid_data_loader import load_woocommerce_stock_data
-             stock_df = load_woocommerce_stock_data()
-    
-    if not stock_df.empty:
-        from BackEnd.core.categories import get_category_for_sales
-        stock_df["Category"] = stock_df["Name"].apply(get_category_for_sales)
-        
-        # Apply Global Strategy Filter to Inventory
-        if global_cats and "All" not in global_cats:
-            mask = pd.Series(False, index=stock_df.index)
-            for cat in global_cats:
-                mask |= stock_df["Category"].str.startswith(cat, na=False)
-            stock_df = stock_df[mask]
-    
-    # Fetch Registered Customer Stats
-    from BackEnd.services.hybrid_data_loader import load_woocommerce_customer_count
-    customer_count = load_woocommerce_customer_count()
-    
-    st.session_state.dashboard_data = {
+
+    return {
         "sales": df_sales_raw,
-        "sales_map": df_sales_map,       # Dedicated map dataset
-        "sales_active": df_sales_active,  # Operational dataset
-        "sales_strict": df_sales_strict,  # Financial dataset
+        "sales_map": pd.DataFrame(),
+        "sales_active": df_sales_active,
+        "sales_strict": df_sales_strict,
         "prev_sales_active": df_prev_active,
         "prev_sales_strict": df_prev_strict,
-        "customers": df_customers,
-        "customer_count": customer_count,
-        "ml": ml_bundle,
-        "stock": stock_df,
-        "summary": {"woocommerce_live": len(df_sales_raw), "stock_rows": len(stock_df)},
+        "customers": None,
+        "customer_count": None,
+        "ml": None,
+        "stock": stock_df if isinstance(stock_df, pd.DataFrame) else pd.DataFrame(),
+        "summary": {
+            "woocommerce_live": len(df_sales_raw),
+            "stock_rows": len(stock_df) if isinstance(stock_df, pd.DataFrame) else 0,
+        },
         "hint": orders_status.get("status_message", ""),
-        "window_label": window.lower() if window != "Custom Date Range" else f"{days_back} days"
+        "window_label": window.lower() if window != "Custom Date Range" else f"{window_config['days_back']} days",
     }
 
-    data = st.session_state.dashboard_data
-    
-    # Dashboard analyzes full cleansed dataset (Sidebar filters removed)
-    segment_filter = ["All"]
-    status_filter = ["All"]
 
-    # Apply user-selected global filters (already handled but ensuring scope)
+def _enrich_dashboard_data_for_selection(
+    data: dict,
+    selection: str,
+    active_snapshot_mode: bool,
+    global_cats: list[str],
+) -> dict:
+    if selection in SECTIONS_REQUIRING_STOCK:
+        stock_df = data.get("stock", pd.DataFrame())
+        if stock_df.empty and not active_snapshot_mode:
+            from BackEnd.services.hybrid_data_loader import load_woocommerce_stock_data
+
+            with st.spinner("📦 Syncing inventory levels..."):
+                stock_df = load_woocommerce_stock_data()
+
+        if not stock_df.empty:
+            stock_df = stock_df.copy()
+            if "Category" not in stock_df.columns or stock_df["Category"].isna().all():
+                from BackEnd.core.categories import get_category_for_sales
+
+                stock_df["Category"] = stock_df["Name"].apply(get_category_for_sales)
+            stock_df = _filter_stock_by_categories(stock_df, global_cats)
+
+        data["stock"] = stock_df
+
+    needs_customers = selection in SECTIONS_REQUIRING_CUSTOMERS or selection in SECTIONS_REQUIRING_ML
+    if active_snapshot_mode and needs_customers and data.get("ml") is None:
+        from BackEnd.services.hybrid_data_loader import load_static_ml_bundle
+
+        data["ml"] = load_static_ml_bundle() or {}
+        snapshot_customers = data["ml"].get("customers") if isinstance(data["ml"], dict) else None
+        if snapshot_customers is not None:
+            data["customers"] = snapshot_customers
+
+    if needs_customers and data.get("customers") is None:
+        from BackEnd.services.customer_insights import generate_customer_insights_from_sales
+
+        with st.spinner("Building customer intelligence..."):
+            data["customers"] = generate_customer_insights_from_sales(data["sales_strict"], include_rfm=True)
+
+    if selection in SECTIONS_REQUIRING_ML and data.get("ml") is None:
+        from BackEnd.services.ml_insights import build_ml_insight_bundle
+
+        with st.spinner("Generating ML insights..."):
+            data["ml"] = build_ml_insight_bundle(data["sales_strict"], data["customers"], horizon_days=7)
+
+    if selection == "👥 Customer Insight" and data.get("customer_count") is None:
+        from BackEnd.services.hybrid_data_loader import load_woocommerce_customer_count
+
+        data["customer_count"] = load_woocommerce_customer_count()
+
+    return data
+
+
+def render_intelligence_hub_page():
+    _render_banner()
+
+    global_sync = st.session_state.pop("global_sync_request", False)
+    if global_sync:
+        st.session_state.pop("dashboard_context_key", None)
+        st.session_state.pop("dashboard_data", None)
+
+    window = st.session_state.get("time_window", "Last Month")
+    selection = st.session_state.get("active_section", "💎 Sales Overview")
+    window_config = _get_window_config(window)
+    orders_status = get_woocommerce_orders_cache_status(
+        window_config["start_date_str"],
+        window_config["end_date_str"],
+    )
+    needs_history = window == "Custom Date Range" and not orders_status.get("is_covered", True)
+
+    from FrontEnd.utils.config import USE_STATIC_SNAPSHOT
+
+    slow_conn = st.session_state.get("conn_speed_mode") == "Slow Connection"
+    active_snapshot_mode = USE_STATIC_SNAPSHOT or slow_conn
+    global_cats = st.session_state.get("global_categories", ["All"])
+    global_stats = st.session_state.get("global_statuses", ["All"])
+
+    context_key = "|".join(
+        [
+            window,
+            window_config["start_date_str"],
+            window_config["end_date_str"],
+            window_config["prev_start_date_str"],
+            window_config["prev_end_date_str"],
+            str(active_snapshot_mode),
+            _serialize_context_value(global_cats),
+            _serialize_context_value(global_stats),
+            str(orders_status.get("last_refresh") or ""),
+        ]
+    )
+
+    data = st.session_state.get("dashboard_data")
+    if st.session_state.get("dashboard_context_key") != context_key or not isinstance(data, dict):
+        st.session_state["dashboard_context_key"] = context_key
+        data = _build_core_dashboard_data(
+            window=window,
+            window_config=window_config,
+            global_sync=global_sync,
+            active_snapshot_mode=active_snapshot_mode,
+            needs_history=needs_history,
+            orders_status=orders_status,
+            global_cats=global_cats,
+            global_stats=global_stats,
+        )
+        if data is None:
+            return
+        st.session_state["dashboard_data"] = data
+
+    data = _enrich_dashboard_data_for_selection(data, selection, active_snapshot_mode, global_cats)
+    st.session_state["dashboard_data"] = data
+
     df_exec = data["sales_active"]
-    
-    # Re-calculate core dataset metrics
     exec_orders = build_order_level_dataset(df_exec)
     total_rev = sum_order_level_revenue(df_exec, order_df=exec_orders)
     order_count = exec_orders["order_id"].nunique() if not exec_orders.empty else 0
-    cust_count = df_exec["customer_key"].nunique()
-    total_items = int(df_exec["qty"].sum())
+    cust_count = df_exec["customer_key"].nunique() if "customer_key" in df_exec.columns else 0
+    total_items = int(df_exec["qty"].sum()) if "qty" in df_exec.columns else 0
     aov = (total_rev / order_count) if order_count else 0
-    avg_orders_per_day = order_count / max(1, days_back)
-    
-    # --- Comparative Logic ---
-    df_prev_comp = data["prev_sales_active"] # Compare Active vs Active
+    avg_orders_per_day = order_count / max(1, int(window_config["days_back"]))
+
+    df_prev_comp = data["prev_sales_active"]
     prev_orders_level = build_order_level_dataset(df_prev_comp)
-    
     prev_items_val = df_prev_comp["qty"].sum() if not df_prev_comp.empty else 0
     prev_rev_val = sum_order_level_revenue(df_prev_comp, order_df=prev_orders_level)
-    
     prev_orders_val = prev_orders_level["order_id"].nunique() if not prev_orders_level.empty else 0
     prev_aov_val = (prev_rev_val / prev_orders_val) if prev_orders_val else 0
     prev_cust_val = df_prev_comp["customer_key"].nunique() if not df_prev_comp.empty else 0
-    prev_avg_orders_val = (prev_orders_val / days_back) if days_back else 0
-    
+    prev_avg_orders_val = prev_orders_val / max(1, int(window_config["days_back"]))
+
     def calc_delta(curr, prev):
-        if not prev or prev <= 0: return "", 0
+        if not prev or prev <= 0:
+            return "", 0
         diff = curr - prev
-        pct = (diff / prev * 100)
-        label = f"{pct:+.1f}% vs last {data['window_label']}"
-        return label, diff
+        pct = diff / prev * 100
+        return f"{pct:+.1f}% vs last {data['window_label']}", diff
 
     d_items_label, d_items_val = calc_delta(total_items, prev_items_val)
     d_rev_label, d_rev_val = calc_delta(total_rev, prev_rev_val)
@@ -364,70 +447,73 @@ def render_intelligence_hub_page():
     d_cust_label, d_cust_val = calc_delta(cust_count, prev_cust_val)
     d_aov_label, d_aov_val = calc_delta(aov, prev_aov_val)
 
-    # 1. Executive Summary Pillars (Global Across Tabs)
     c1, c2, c3, c4, c5, c6 = st.columns(6)
-    with c1: ui.icon_metric("Total Items Sold", f"{total_items:,}", icon="📦", delta=d_items_label, delta_val=d_items_val)
-    with c2: ui.icon_metric("Revenue", f"৳{total_rev:,.0f}", icon="💰", delta=d_rev_label, delta_val=d_rev_val)
-    with c3: ui.icon_metric("Orders", f"{order_count:,}", icon="🛒", delta=d_orders_label, delta_val=d_orders_val)
-    with c4: ui.icon_metric("Avg. Orders / Day", f"{avg_orders_per_day:,.0f}", icon="📅", delta=d_avg_label, delta_val=d_avg_val)
-    with c5: ui.icon_metric("Customers", f"{cust_count:,}", icon="👥", delta=d_cust_label, delta_val=d_cust_val)
-    with c6: ui.icon_metric("Basket Size", f"৳{aov:,.0f}", icon="💎", delta=d_aov_label, delta_val=d_aov_val)
+    with c1:
+        ui.icon_metric("Total Items Sold", f"{total_items:,}", icon="📦", delta=d_items_label, delta_val=d_items_val)
+    with c2:
+        ui.icon_metric("Revenue", f"৳{total_rev:,.0f}", icon="💰", delta=d_rev_label, delta_val=d_rev_val)
+    with c3:
+        ui.icon_metric("Orders", f"{order_count:,}", icon="🛒", delta=d_orders_label, delta_val=d_orders_val)
+    with c4:
+        ui.icon_metric("Avg. Orders / Day", f"{avg_orders_per_day:,.0f}", icon="📅", delta=d_avg_label, delta_val=d_avg_val)
+    with c5:
+        ui.icon_metric("Customers", f"{cust_count:,}", icon="👥", delta=d_cust_label, delta_val=d_cust_val)
+    with c6:
+        ui.icon_metric("Basket Size", f"৳{aov:,.0f}", icon="💎", delta=d_aov_label, delta_val=d_aov_val)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Routing based on sidebar selection
-    selection = st.session_state.get("active_section", "💎 Sales Overview")
 
     if selection == "💎 Sales Overview":
-        # --- MERGED STRATEGIC INTELLIGENCE HUB ---
         from BackEnd.services.strategic_intelligence import generate_executive_narrative
+        from .dashboard_lib.bi_analytics import render_sales_overview_timeseries
         from .dashboard_lib.story import render_dashboard_story
-        
-        # 1. Fetch Narrative Components
+
         story_points = render_dashboard_story(
-            data["sales_active"], data["customers"], data["ml"], 
-            window, df_prev_sales=data["prev_sales_active"], return_raw=True
+            data["sales_active"],
+            data.get("customers", pd.DataFrame()),
+            data.get("ml") or {},
+            window,
+            df_prev_sales=data["prev_sales_active"],
+            return_raw=True,
         )
-        
         briefing_points = generate_executive_narrative(
-            data["sales_active"], 
-            st.session_state.get("returns_data", pd.DataFrame()), 
-            total_rev, prev_rev_val
+            data["sales_active"],
+            st.session_state.get("returns_data", pd.DataFrame()),
+            total_rev,
+            prev_rev_val,
         )
-        
-        # 2. Combine & Render
         all_points = story_points + briefing_points
-        
+
         with st.container():
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, rgba(30, 58, 138, 0.08) 0%, rgba(30, 27, 75, 0.05) 100%); 
-                        border-left: 5px solid #3b82f6; border-radius: 12px; padding: 24px; margin: 20px 0;
-                        border: 1px solid rgba(59, 130, 246, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.15);">
-                <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                    <div style="font-size: 1.2rem; margin-right: 12px;">💎</div>
-                    <div style="font-weight: 800; color: #3b82f6; font-size: 0.85rem; letter-spacing: 1.5px; text-transform: uppercase;">
-                        Strategic Executive Intelligence
+            st.markdown(
+                f"""
+                <div style="background: linear-gradient(135deg, rgba(30, 58, 138, 0.08) 0%, rgba(30, 27, 75, 0.05) 100%);
+                            border-left: 5px solid #3b82f6; border-radius: 12px; padding: 24px; margin: 20px 0;
+                            border: 1px solid rgba(59, 130, 246, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.15);">
+                    <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                        <div style="font-size: 1.2rem; margin-right: 12px;">💎</div>
+                        <div style="font-weight: 800; color: #3b82f6; font-size: 0.85rem; letter-spacing: 1.5px; text-transform: uppercase;">
+                            Strategic Executive Intelligence
+                        </div>
+                    </div>
+                    <div style="font-size: 0.95rem; line-height: 1.7; color: var(--text-color);">
+                        {"<div style='margin-bottom:10px;'>" + "</div><div style='margin-bottom:10px;'>".join([f"• {point}" for point in all_points]) + "</div>"}
                     </div>
                 </div>
-                <div style="font-size: 0.95rem; line-height: 1.7; color: var(--text-color);">
-                    {"<div style='margin-bottom:10px;'>" + "</div><div style='margin-bottom:10px;'>".join([f"• {point}" for point in all_points]) + "</div>"}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
+                """,
+                unsafe_allow_html=True,
+            )
+
         st.divider()
-        render_sales_overview_timeseries(data["sales_active"], ml_bundle=data["ml"])
+        render_sales_overview_timeseries(data["sales_active"], ml_bundle=data.get("ml") or {})
 
-        
-
-    
     elif selection == "📊 Traffic & Acquisition":
+        from .dashboard_lib.acquisition import render_acquisition_analytics
+
         render_acquisition_analytics(data["sales_active"])
-        
+
     elif selection == "👥 Customer Insight":
         st.subheader("Customer Insight")
-        # Calculate registered vs guest revenue
-        df_exec = data["sales_active"]
         if "customer_key" in df_exec.columns:
             is_registered = df_exec["customer_key"].str.startswith("reg_", na=False)
             reg_val = df_exec[is_registered]["item_revenue"].sum() if is_registered.any() else 0
@@ -435,22 +521,26 @@ def render_intelligence_hub_page():
         else:
             reg_val = 0
             guest_val = 0
-        # Pass executive sales for analysis consistency
-        render_customer_insight_tab(reg_val, guest_val, data["customer_count"], data["sales_active"])
-        
+        render_customer_insight_tab(reg_val, guest_val, data.get("customer_count", 0), data["sales_active"])
+
     elif selection == "🔄 Returns Insights":
         from .dashboard_lib.returns_tracker import render_returns_tracker_page
+
         render_returns_tracker_page()
 
     elif selection == "📥 Sales Data Ingestion":
+        from .dashboard_lib.deep_dive import render_deep_dive_tab
+
         render_deep_dive_tab(data["sales_active"], data["stock"], data["prev_sales_active"], window_label=data["window_label"])
-        
+
     elif selection == "📦 Stock Insight":
+        from .dashboard_lib.inventory import render_inventory_health
+
         st.subheader("Operational Forecasting")
-        render_inventory_health(data["stock"], data["ml"].get("forecast"), data["sales"])
-        
+        render_inventory_health(data["stock"], (data.get("ml") or {}).get("forecast"), data["sales"])
+
     elif selection == "🚀 Data Pilot":
-        render_data_pilot_page(data["sales"], data["stock"], data["customers"])
+        render_data_pilot_page(data["sales"], data["stock"], data.get("customers"))
 
 
 # --- MERGED COMPONENT LOGIC ---
@@ -462,7 +552,8 @@ def render_customer_insight_tab(reg_rev: float, guest_rev: float, total_accounts
     the new Customer Insight module for dynamic filtering and detailed
     customer reports.
     """
-    # Use the enhanced version that includes both legacy insights and new module
+    from .dashboard_lib.customer_insight_page import render_enhanced_customer_insight_tab
+
     render_enhanced_customer_insight_tab(reg_rev, guest_rev, total_accounts, df_sales)
 
 
@@ -514,6 +605,8 @@ def render_data_pilot_page(sales_df: pd.DataFrame, stock_df: pd.DataFrame, custo
             st.info("Insufficient transaction density to discover complex product associations. Check back after more orders.")
 
     with tab4:
+        from .dashboard_lib.audit import render_data_audit, render_data_trust_panel
+
         st.markdown("### 🛡️ System Reliability Audit")
         render_data_trust_panel(sales_df)
         if customers_df is not None:

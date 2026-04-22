@@ -19,8 +19,17 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 
+from BackEnd.core.cache_storage import (
+    build_cache_target,
+    read_json as storage_read_json,
+    read_parquet as storage_read_parquet,
+    target_exists,
+    write_json as storage_write_json,
+    write_parquet as storage_write_parquet,
+)
 from BackEnd.core.logging_config import get_logger
 from BackEnd.core.memory_utils import (
+    optimize_dtypes,
     safe_groupby_transform,
     safe_merge,
     cleanup_memory,
@@ -34,27 +43,25 @@ logger = get_logger("returns_tracker")
 
 # ── Cache Configuration ──
 RETURNS_CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "cache" / "returns"
-RETURNS_CACHE_FILE = RETURNS_CACHE_DIR / "returns_data.parquet"
-RETURNS_META_FILE = RETURNS_CACHE_DIR / "returns_meta.json"
 CACHE_TTL_HOURS = 24
 
 
-def _ensure_cache_dir():
-    """Ensure cache directory exists."""
-    RETURNS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+def _returns_cache_target(name: str) -> str | Path:
+    return build_cache_target(filename=name, local_dir=RETURNS_CACHE_DIR)
 
 
 def _load_cached_returns() -> pd.DataFrame:
     """Load cached returns data if it exists and is fresh."""
-    _ensure_cache_dir()
-    if not RETURNS_CACHE_FILE.exists():
+    returns_cache_file = _returns_cache_target("returns_data.parquet")
+    returns_meta_file = _returns_cache_target("returns_meta.json")
+
+    if not target_exists(returns_cache_file):
         return pd.DataFrame()
     try:
-        df = pd.read_parquet(RETURNS_CACHE_FILE)
+        df = storage_read_parquet(returns_cache_file)
         # Check if cache is fresh
-        if RETURNS_META_FILE.exists():
-            import json
-            meta = json.loads(RETURNS_META_FILE.read_text())
+        if target_exists(returns_meta_file):
+            meta = storage_read_json(returns_meta_file)
             cached_at = pd.to_datetime(meta.get("cached_at"), errors="coerce")
             if pd.notna(cached_at):
                 age = datetime.now() - cached_at.to_pydatetime()
@@ -68,16 +75,16 @@ def _load_cached_returns() -> pd.DataFrame:
 
 def _save_returns_cache(df: pd.DataFrame, last_date: Optional[datetime] = None):
     """Save returns data to cache with metadata."""
-    _ensure_cache_dir()
+    returns_cache_file = _returns_cache_target("returns_data.parquet")
+    returns_meta_file = _returns_cache_target("returns_meta.json")
     try:
-        df.to_parquet(RETURNS_CACHE_FILE, index=False)
-        import json
+        storage_write_parquet(df, returns_cache_file, index=False)
         meta = {
             "cached_at": datetime.now().isoformat(),
             "row_count": len(df),
             "last_date": last_date.isoformat() if last_date else None,
         }
-        RETURNS_META_FILE.write_text(json.dumps(meta, indent=2))
+        storage_write_json(returns_meta_file, meta)
         logger.info(f"Saved {len(df)} returns rows to cache (last date: {last_date})")
     except Exception as e:
         logger.error(f"Failed to save returns cache: {e}")

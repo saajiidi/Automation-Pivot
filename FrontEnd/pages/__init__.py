@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable
+__all__ = ["render_intelligence_hub_page"]
 
-from .dashboard import render_intelligence_hub_page
 
-_PAGE_RENDERERS = {
-    "intelligence_hub": render_intelligence_hub_page,
-}
+def render_intelligence_hub_page():
+    from .dashboard import render_intelligence_hub_page as _render_intelligence_hub_page
 
-__all__ = [
-    "render_intelligence_hub_page",
-]
+    return _render_intelligence_hub_page()

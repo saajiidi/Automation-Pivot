@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from io import BytesIO
-import json
 import os
 from pathlib import Path
 import subprocess
@@ -15,6 +14,15 @@ import pandas as pd
 import requests
 import streamlit as st
 
+from BackEnd.core.cache_storage import (
+    build_cache_target,
+    read_json as storage_read_json,
+    read_parquet as storage_read_parquet,
+    remove_target,
+    target_exists,
+    write_json as storage_write_json,
+    write_parquet as storage_write_parquet,
+)
 from BackEnd.services.woocommerce_service import get_woocommerce_credentials
 from BackEnd.utils.sales_schema import ensure_sales_schema
 from FrontEnd.utils.error_handler import log_error
@@ -26,6 +34,8 @@ STOCK_CACHE_TTL_MINUTES = 20
 REFRESH_LOCK_TTL_MINUTES = 90
 FULL_HISTORY_SYNC_DAYS = 36500
 STATIC_SNAPSHOT_DIR = Path(__file__).parent.parent.parent / "data" / "static_snapshot"
+LIVE_STREAM_URL = os.getenv("LIVE_STREAM_URL", "https://example.com/live-stream.csv")
+COMPARISON_SHEET_URL = os.getenv("COMPARISON_SHEET_URL", "https://example.com/comparison.csv")
 
 
 def _local_user_slug() -> str:
@@ -45,39 +55,32 @@ def _user_cache_dir() -> Path:
     return path
 
 
-def _cache_file(name: str) -> Path:
-    return _user_cache_dir() / name
+def _cache_file(name: str) -> str | Path:
+    return build_cache_target(
+        filename=name,
+        local_dir=LOCAL_CACHE_DIR,
+        local_subdir=_local_user_slug(),
+    )
 
 
-def _read_json(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+def _read_json(path: str | Path) -> dict:
+    return storage_read_json(path)
 
 
-def _write_json(path: Path, payload: dict):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+def _write_json(path: str | Path, payload: dict):
+    storage_write_json(path, payload)
 
 
-def _read_parquet(path: Path) -> pd.DataFrame:
-    if not path.exists():
-        return pd.DataFrame()
-    try:
-        return pd.read_parquet(path)
-    except Exception:
-        return pd.DataFrame()
+def _read_parquet(path: str | Path) -> pd.DataFrame:
+    return storage_read_parquet(path)
 
 
-def _remove_file(path: Path):
-    try:
-        if path.exists():
-            path.unlink()
-    except Exception:
-        pass
+def _write_parquet(df: pd.DataFrame, path: str | Path, *, index: bool = False):
+    storage_write_parquet(df, path, index=index)
+
+
+def _remove_file(path: str | Path):
+    remove_target(path)
 
 
 def _is_fresh(timestamp: str | None, ttl_minutes: int) -> bool:
@@ -166,7 +169,7 @@ def _build_orders_cache_status(start_date: Optional[str], end_date: Optional[str
     cache_path = _cache_file("woo_orders.parquet")
     meta = _read_json(_cache_file("woo_orders_meta.json"))
     status_meta = _read_json(_refresh_status_path("orders"))
-    cache_exists = cache_path.exists()
+    cache_exists = target_exists(cache_path)
     is_covered = _cache_range_is_covered(meta, start_ts, end_ts)
     is_fresh = _is_fresh(meta.get("fetched_at"), WOO_CACHE_TTL_MINUTES)
     is_running = _refresh_is_running("orders")
@@ -201,7 +204,7 @@ def _build_orders_cache_status(start_date: Optional[str], end_date: Optional[str
 def _build_full_history_sync_status(end_date: Optional[str] = None) -> dict:
     meta = _read_json(_cache_file("woo_orders_meta.json"))
     status_meta = _read_json(_refresh_status_path("full_history"))
-    cache_exists = _cache_file("woo_orders.parquet").exists()
+    cache_exists = target_exists(_cache_file("woo_orders.parquet"))
     is_running = _refresh_is_running("full_history")
     is_complete = bool(meta.get("full_history_complete"))
     last_full_sync = meta.get("last_full_sync_at") or status_meta.get("updated_at")
@@ -231,7 +234,7 @@ def _build_stock_cache_status() -> dict:
     cache_path = _cache_file("woo_stock.parquet")
     meta = _read_json(_cache_file("woo_stock_meta.json"))
     status_meta = _read_json(_refresh_status_path("stock"))
-    cache_exists = cache_path.exists()
+    cache_exists = target_exists(cache_path)
     is_fresh = _is_fresh(meta.get("fetched_at"), STOCK_CACHE_TTL_MINUTES)
     is_running = _refresh_is_running("stock")
 
@@ -283,6 +286,34 @@ def estimate_woocommerce_load_time(
     return "Estimated load time: the screen opens immediately, and the first WooCommerce sync usually finishes in 15-60 seconds."
 
 
+def _load_csv_stream(url: str) -> pd.DataFrame:
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+    return pd.read_csv(BytesIO(response.content))
+
+
+@st.cache_data(ttl=900)
+def load_live_stream_data() -> pd.DataFrame:
+    if not LIVE_STREAM_URL:
+        return pd.DataFrame()
+    try:
+        return ensure_sales_schema(_load_csv_stream(LIVE_STREAM_URL))
+    except Exception as exc:
+        log_error(exc, context="Hybrid Loader - Live Stream")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=900)
+def load_comparison_data() -> pd.DataFrame:
+    if not COMPARISON_SHEET_URL:
+        return pd.DataFrame()
+    try:
+        return ensure_sales_schema(_load_csv_stream(COMPARISON_SHEET_URL))
+    except Exception as exc:
+        log_error(exc, context="Hybrid Loader - Comparison Stream")
+        return pd.DataFrame()
+
+
 def load_cached_woocommerce_live_data(
     days: int = 30,
     start_date: Optional[str] = None,
@@ -304,7 +335,7 @@ def load_cached_woocommerce_stock_data() -> pd.DataFrame:
     return _read_parquet(_cache_file("woo_stock.parquet"))
 
 
-def load_woocommerce_customer_count() -> int:
+def load_cached_woocommerce_customer_count() -> int:
     from FrontEnd.utils.config import USE_STATIC_SNAPSHOT
     if USE_STATIC_SNAPSHOT:
         meta = _read_json(STATIC_SNAPSHOT_DIR / "metadata.json")
@@ -520,7 +551,7 @@ def refresh_woocommerce_orders_cache(
             pd.concat([cached_df, fetched_df], ignore_index=True, sort=False)
         )
         merged_cache = _dedupe_orders(merged_cache)
-        merged_cache.to_parquet(cache_path, index=False)
+        _write_parquet(merged_cache, cache_path, index=False)
 
         fetched_start = pd.to_datetime(fetched_df["order_date"], errors="coerce").min()
         fetched_start = fetched_start if pd.notna(fetched_start) else start_ts
@@ -583,7 +614,7 @@ def refresh_woocommerce_stock_cache() -> pd.DataFrame:
         fetched_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         stock_df["_source"] = "woocommerce_stock_api"
         stock_df["_imported_at"] = fetched_at
-        stock_df.to_parquet(cache_path, index=False)
+        _write_parquet(stock_df, cache_path, index=False)
         _write_json(
             meta_path,
             {
@@ -645,12 +676,16 @@ def load_woocommerce_stock_data() -> pd.DataFrame:
 def load_woocommerce_customer_count() -> int:
     """Fetch total count of registered store customers (12h cache)."""
     try:
+        cached_count = load_cached_woocommerce_customer_count()
+        if cached_count:
+            return int(cached_count)
+
         from BackEnd.services.woocommerce_service import WooCommerceService
         wc = WooCommerceService(ui_enabled=False)
         return wc.get_registered_customer_count()
     except Exception as exc:
         log_error(exc, context="Hybrid Loader - Customer Count")
-        return 0
+        return int(load_cached_woocommerce_customer_count() or 0)
 
 
 @st.cache_data(ttl=3600)
