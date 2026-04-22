@@ -105,6 +105,10 @@ def _normalize_bounds(start_date: Optional[str], end_date: Optional[str], days: 
     if pd.isna(end_ts):
         end_ts = pd.Timestamp.now()
     
+    # If end_date was provided as date-only (no time component), set to end of day (23:59:59)
+    if end_date and len(str(end_date)) <= 10:  # Date-only format like "2026-04-05"
+        end_ts = end_ts.normalize() + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    
     # Preserve time if it exists in the original strings, otherwise start_ts is normalized and end_ts is now
     return start_ts, end_ts
 

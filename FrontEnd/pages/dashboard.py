@@ -243,7 +243,8 @@ def _build_core_dashboard_data(
                     DASHBOARD_SALES_COLUMNS,
                 )
         else:
-            sync_mode = "live" if (window == "Last Day" or global_sync) else "cache_only"
+            # Use live mode for Last Day, Custom Date Range, or when global sync requested
+            sync_mode = "live" if (window in ("Last Day", "Custom Date Range") or global_sync) else "cache_only"
             df_sales_raw = prune_dataframe(
                 load_hybrid_data(
                     start_date=window_config["start_date_str"],

@@ -68,6 +68,8 @@ def load_master_sales_dataset(force_refresh: bool = False) -> tuple[pd.DataFrame
 
     try:
         final_df.to_parquet(MASTER_CACHE_FILE, index=False)
+        # Also save as parquet snapshot for fast loading without Excel
+        final_df.to_parquet(CORE_PARQUET_SNAPSHOT_PATH, index=False)
     except Exception:
         pass
 

@@ -42,7 +42,7 @@ def build_shopai_conversation_frame(conversations: Iterable[dict], customers_df:
         phone = _normalize_phone(row.get("customer_id", ""))
         name_norm = str(row.get("customer", "")).strip().lower()
 
-        match = lookup[lookup["phone_tokens"].apply(lambda phones: phone and phone in phones)]
+        match = lookup[lookup["phone_tokens"].apply(lambda phones: bool(phone) and phone in phones)]
         if match.empty and name_norm:
             match = lookup[lookup["primary_name_norm"] == name_norm]
 

@@ -64,13 +64,15 @@ def ensure_sales_schema(df: pd.DataFrame) -> pd.DataFrame:
             out[canonical_name] = pd.NA
 
     out["order_date"] = pd.to_datetime(out["order_date"], errors="coerce")
+    out["shipped_date"] = pd.to_datetime(out["shipped_date"], errors="coerce")
     out["qty"] = pd.to_numeric(out["qty"], errors="coerce").fillna(0)
     out["order_total"] = pd.to_numeric(out["order_total"], errors="coerce").fillna(0)
 
     # Memory-efficient string cleaning for text columns
+    # NOTE: shipped_date is a datetime column, not text - handled separately
     for text_col in [
         "order_id", "customer_name", "phone", "email", "state", "city",
-        "item_name", "order_status", "tracking", "shipped_date",
+        "item_name", "order_status", "tracking",
         "payment_method", "sku", "source",
     ]:
         if text_col in out.columns:

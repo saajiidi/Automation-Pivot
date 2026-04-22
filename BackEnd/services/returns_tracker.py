@@ -1381,7 +1381,13 @@ def _build_daily_financials(returns_df: pd.DataFrame, sales_df: Optional[pd.Data
         # Use safe_merge instead of chained merge
         timeline = safe_merge(timeline, full_daily, on="date", how="left")
         timeline = safe_merge(timeline, partial_daily, on="date", how="left")
-        
+
+        # Ensure columns exist (safe_merge may not add them if right side is empty)
+        if "return_loss" not in timeline.columns:
+            timeline["return_loss"] = 0.0
+        if "partial_loss" not in timeline.columns:
+            timeline["partial_loss"] = 0.0
+
         timeline["return_loss"] = pd.to_numeric(timeline["return_loss"], errors="coerce").fillna(0.0)
         timeline["partial_loss"] = pd.to_numeric(timeline["partial_loss"], errors="coerce").fillna(0.0)
         timeline["total_loss"] = timeline["return_loss"] + timeline["partial_loss"]
