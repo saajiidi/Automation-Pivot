@@ -79,7 +79,7 @@ def render_returns_tracker_page() -> None:
     with c1:
         st.markdown("### 🔄 Returns Insights")
     with c2:
-        if st.button("🔄 Force Refresh", use_container_width=True):
+        if st.button("🔄 Force Refresh", width="stretch"):
             with st.spinner("Syncing..."):
                 load_returns_data.clear()
                 sync_window = get_current_sync_window()
@@ -430,7 +430,7 @@ def _render_financial_impact_summary(metrics: dict) -> None:
                 hovermode="x unified",
                 legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center")
             )
-            st.plotly_chart(fig_gap, use_container_width=True)
+            st.plotly_chart(fig_gap, width="stretch")
 
     confidence = metrics.get("attribution_confidence_pct", 0.0)
     matched_items = metrics.get("matched_returned_items", 0)
@@ -570,7 +570,7 @@ def _render_monthly_trend(df: pd.DataFrame) -> None:
         legend=dict(orientation="h", y=-0.2),
         margin=dict(l=20, r=20, t=50, b=20),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # Total trend line
     total_monthly = (
@@ -618,7 +618,7 @@ def _render_monthly_trend(df: pd.DataFrame) -> None:
         margin=dict(l=20, r=20, t=50, b=20),
         yaxis_title="Count",
     )
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width="stretch")
 
 
 def _render_reason_charts(metrics: dict) -> None:
@@ -648,7 +648,7 @@ def _render_reason_charts(metrics: dict) -> None:
             font=dict(family="Inter, sans-serif"),
             margin=dict(l=20, r=20, t=50, b=20),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with c2:
         fig2 = px.bar(
@@ -667,7 +667,7 @@ def _render_reason_charts(metrics: dict) -> None:
             showlegend=False,
             yaxis=dict(autorange="reversed"),
         )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width="stretch")
 
 
 def _render_product_heatmap(df: pd.DataFrame) -> None:
@@ -721,7 +721,7 @@ def _render_product_heatmap(df: pd.DataFrame) -> None:
         margin=dict(l=20, r=20, t=50, b=20),
         height=max(400, len(pivot) * 30 + 100),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def _extract_product_category(details: str) -> str:
@@ -786,7 +786,7 @@ def _render_customer_recovery(df: pd.DataFrame, sales_df: pd.DataFrame) -> None:
     st.markdown("##### 📋 Recovery Ledger")
     st.dataframe(
         reorders,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Days to Reorder": st.column_config.NumberColumn(format="%d days"),
@@ -875,7 +875,7 @@ def _render_return_inventory(df: pd.DataFrame, sales_df: pd.DataFrame) -> None:
     # 3. Render
     st.dataframe(
         item_df,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Order ID": st.column_config.TextColumn("Order ID"),
@@ -1007,7 +1007,7 @@ def _render_returned_items_list(df: pd.DataFrame) -> None:
     # Display data table
     st.dataframe(
         filtered_df,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Date": st.column_config.DateColumn("Date"),
@@ -1053,7 +1053,7 @@ def _render_returned_items_list(df: pd.DataFrame) -> None:
                 reason_df = reason_counts.reset_index()
                 reason_df.columns = ['Reason', 'Count']
                 reason_df['% of Returns'] = (reason_df['Count'] / reason_df['Count'].sum() * 100).round(1)
-                st.dataframe(reason_df, use_container_width=True, hide_index=True)
+                st.dataframe(reason_df, width="stretch", hide_index=True)
 
             with c2:
                 st.markdown("**💡 Predictions & Insights:**")
@@ -1096,13 +1096,21 @@ def _render_returned_items_list(df: pd.DataFrame) -> None:
 
 
 def ui_metric_small(label: str, value: str, icon: str):
-    """Small metric helper."""
+    """Small metric helper with premium glassmorphism styling."""
     st.markdown(f"""
-        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.1); 
-                    border-radius: 8px; padding: 12px; text-align: center; margin-bottom: 10px;">
+        <div style="
+            background: var(--surface);
+            border: 1px solid var(--outline);
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            backdrop-filter: blur(10px);
+        ">
             <div style="font-size: 1.2rem; margin-bottom: 4px;">{icon}</div>
-            <div style="font-size: 0.75rem; color: #6b7280; text-transform: uppercase; font-weight: 700;">{label}</div>
-            <div style="font-size: 1.4rem; font-weight: 800; color: var(--text-color);">{value}</div>
+            <div style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">{label}</div>
+            <div style="font-size: 1.3rem; font-weight: 700; color: var(--text-color);">{value}</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -1193,7 +1201,7 @@ def _render_details_table(df: pd.DataFrame, sales_df: pd.DataFrame) -> None:
 
     st.dataframe(
         display_df,
-        use_container_width=True,
+        width="stretch",
         height=500,
         column_config={
             "Partial ৳": st.column_config.NumberColumn(format="৳%.0f"),
@@ -1213,7 +1221,7 @@ def _render_export(df: pd.DataFrame, metrics: dict) -> None:
 
     st.markdown("### 📤 Export Report")
 
-    if st.button("📊 Export Returns Report", type="primary", use_container_width=False):
+    if st.button("📊 Export Returns Report", type="primary", width="content"):
         with st.spinner("Generating report..."):
             buffer = _generate_excel_report(df, metrics)
             st.download_button(

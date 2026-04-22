@@ -122,7 +122,7 @@ def render_district_map(df_sales: pd.DataFrame):
         )
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     
     with gv2:
         st.markdown(f"#### 🔥 Top 20 Hotspots")
@@ -144,7 +144,7 @@ def render_district_map(df_sales: pd.DataFrame):
             xaxis=dict(showgrid=False),
             yaxis=dict(showgrid=False, categoryorder="total ascending")
         )
-        st.plotly_chart(fig_spot, use_container_width=True)
+        st.plotly_chart(fig_spot, width="stretch")
     
     # 📝 Summary Insight
     if not spot_raw.empty:

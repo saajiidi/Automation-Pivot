@@ -12,10 +12,10 @@ def render_data_audit(df_sales: pd.DataFrame, df_customers: pd.DataFrame):
     per_source = order_level.groupby("source", dropna=False).agg(orders=("order_id", "nunique"), revenue=("order_total", "sum")).reset_index()
     per_day = order_level.groupby("order_day", dropna=False).agg(orders=("order_id", "nunique"), revenue=("order_total", "sum")).reset_index()
     c1, c2 = st.columns(2)
-    with c1: st.markdown("##### Source Mix"); st.dataframe(per_source, use_container_width=True, hide_index=True)
-    with c2: st.markdown("##### Daily Coverage"); st.dataframe(per_day.sort_values("order_day", ascending=False), use_container_width=True, hide_index=True)
+    with c1: st.markdown("##### Source Mix"); st.dataframe(per_source, width="stretch", hide_index=True)
+    with c2: st.markdown("##### Daily Coverage"); st.dataframe(per_day.sort_values("order_day", ascending=False), width="stretch", hide_index=True)
     st.markdown("#### Sample Orders")
-    st.dataframe(order_level.head(50), use_container_width=True, hide_index=True)
+    st.dataframe(order_level.head(50), width="stretch", hide_index=True)
 
 def render_data_trust_panel(df: pd.DataFrame):
     missing_total = df["order_total"].isna().sum()

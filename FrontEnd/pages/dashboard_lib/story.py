@@ -191,5 +191,5 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
                 st.warning(f"🚨 At-Risk VIPs: These customers are high-value but haven't interacted in 21+ days.")
                 st.dataframe(at_risk_vips[["primary_name", "total_revenue", "total_orders", "recency_days"]].rename(
                     columns={"primary_name": "Customer", "total_revenue": "Lifetime Value", "recency_days": "Days Since Last Order"}
-                ), use_container_width=True, hide_index=True)
+                ), width="stretch", hide_index=True)
                 st.caption("💡 Suggestion: Launch a 'We Miss You' WhatsApp campaign for these specific individuals.")

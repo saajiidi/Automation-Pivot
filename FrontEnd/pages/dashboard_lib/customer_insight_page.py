@@ -160,7 +160,7 @@ def _render_analysis_tab() -> None:
     
     with col_s:
         st.markdown("### ⚙️ Optimization")
-        if st.button("🔄 Update Customer Mapping", use_container_width=True, help="Fetch recent orders and update first-order dates"):
+        if st.button("🔄 Update Customer Mapping", width="stretch", help="Fetch recent orders and update first-order dates"):
             with st.spinner("Updating mapping..."):
                 sales_df = st.session_state.dashboard_data.get("sales_active", pd.DataFrame())
                 if not sales_df.empty:
@@ -234,7 +234,7 @@ def _render_consolidation_tab() -> None:
         # Display Table
         st.dataframe(
             filtered_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "first_order_date": st.column_config.DateColumn("First Order"),
@@ -250,7 +250,7 @@ def _render_consolidation_tab() -> None:
             data=csv,
             file_name=f"customer_ledger_{datetime.now().strftime('%Y%m%d')}.csv",
             mime='text/csv',
-            use_container_width=True,
+            width="stretch",
         )
 
 
@@ -362,7 +362,7 @@ def _render_main_content(filters: Dict[str, Any]) -> None:
             data=excel_data,
             file_name=f"filtered_customers_{len(customers_df)}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
+            width="stretch",
         )
     with export_col2:
         st.caption(f"Exporting {len(customers_df)} unique customers with their details")
@@ -513,13 +513,13 @@ def _render_legacy_insights(df_sales: pd.DataFrame) -> None:
     with c1:
         st.plotly_chart(
             ui.donut_chart(mix_df, values="Count", names="Segment", title="Segment Distribution"),
-            use_container_width=True
+            width="stretch"
         )
     with c2:
         rev_df = df.groupby("segment")["total_revenue"].sum().reset_index().sort_values("total_revenue", ascending=False)
         st.plotly_chart(
             ui.bar_chart(rev_df, x="total_revenue", y="segment", title="Revenue by Segment", color_scale="Tealgrn"),
-            use_container_width=True
+            width="stretch"
         )
 
 
@@ -584,7 +584,7 @@ def _render_compact_results(filters: Dict[str, Any]) -> None:
             data=excel_data,
             file_name=f"filtered_customers_{len(customers_df)}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
+            width="stretch",
             key="ci_tab_export",
         )
     with export_col2:

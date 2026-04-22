@@ -38,7 +38,7 @@ def render_operational_health(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
                          title="Shipping Velocity Distribution",
                          labels={'Count': 'Orders'},
                          color_discrete_sequence=['#F59E0B'])
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
     else:
         st.info("No 'Shipped Date' data available in this window to calculate velocity.")
 
@@ -69,7 +69,7 @@ def render_operational_health(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
     fig_ref = px.line(weekly_refunds, x='Week', y='Refund Rate', title="Weekly Refund Rate Trend",
                       markers=True, color_discrete_sequence=['#EF4444'])
     fig_ref.add_hline(y=5.0, line_dash="dash", line_color="green", annotation_text="Target")
-    st.plotly_chart(fig_ref, use_container_width=True)
+    st.plotly_chart(fig_ref, width="stretch")
 
     st.divider()
 
@@ -96,6 +96,6 @@ def render_operational_health(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
         cat_stock.columns = ['Category', 'Product Count', 'Total Stock']
         
         st.plotly_chart(px.treemap(stock_df, path=['Category', 'Name'], values='Stock Quantity', 
-                                   title="Inventory Volume by Category"), use_container_width=True)
+                                   title="Inventory Volume by Category"), width="stretch")
     else:
         st.warning("Inventory data currently unavailable.")

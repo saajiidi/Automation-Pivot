@@ -596,7 +596,7 @@ def render_data_pilot_page(sales_df: pd.DataFrame, stock_df: pd.DataFrame, custo
         
         if not rules.empty:
             st.markdown("##### Detected High-Lift Product Affinities")
-            st.dataframe(rules[["Antecedent", "Consequent", "Lift", "Confidence", "Frequency"]].head(10), use_container_width=True, hide_index=True)
+            st.dataframe(rules[["Antecedent", "Consequent", "Lift", "Confidence", "Frequency"]].head(10), width="stretch", hide_index=True)
             
             # Bundle Fulfillment
             st.markdown("##### 📦 Bundle Fulfillment Analysis")
@@ -607,7 +607,7 @@ def render_data_pilot_page(sales_df: pd.DataFrame, stock_df: pd.DataFrame, custo
                 inv_intel = InventoryIntelligence(sales_df, stock_df)
                 pairs = rules.head(5).apply(lambda x: {'A': x['Antecedent'], 'B': x['Consequent']}, axis=1).tolist()
                 bundles = inv_intel.calculate_bundle_fulfillment(pairs)
-                st.dataframe(bundles, use_container_width=True, hide_index=True)
+                st.dataframe(bundles, width="stretch", hide_index=True)
         else:
             st.info("Insufficient transaction density to discover complex product associations. Check back after more orders.")
 

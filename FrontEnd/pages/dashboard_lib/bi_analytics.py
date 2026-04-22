@@ -71,9 +71,9 @@ def render_today_vs_last_day_sales_chart(df_sales: pd.DataFrame, df_customers: p
     order_daily["day_label"] = order_daily.apply(lambda row: f"{ {0: 'Today', 1: 'Previous'}.get((latest_day-row['order_day']).days, 'Earlier') } - {row['order_day'].strftime('%A, %d %b')}", axis=1)
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(px.bar(order_daily, x="day_label", y="revenue", color="day_label", title="Today vs Previous Day Revenue", text_auto=".2s").update_layout(height=320, showlegend=False), use_container_width=True)
+        st.plotly_chart(px.bar(order_daily, x="day_label", y="revenue", color="day_label", title="Today vs Previous Day Revenue", text_auto=".2s").update_layout(height=320, showlegend=False), width="stretch")
     with c2:
-        st.plotly_chart(px.bar(order_daily.melt(id_vars=["day_label"], value_vars=["orders", "unique_customers", "new_customers", "units"], var_name="metric", value_name="value"), x="metric", y="value", color="day_label", barmode="group", title="Today vs Previous Day Volume").update_layout(height=320), use_container_width=True)
+        st.plotly_chart(px.bar(order_daily.melt(id_vars=["day_label"], value_vars=["orders", "unique_customers", "new_customers", "units"], var_name="metric", value_name="value"), x="metric", y="value", color="day_label", barmode="group", title="Today vs Previous Day Volume").update_layout(height=320), width="stretch")
 
 def render_last_7_days_sales_chart(df_sales: pd.DataFrame, df_customers: pd.DataFrame):
     st.markdown("#### Daily Comparison: Today vs Last Day vs Previous 7 Days")
@@ -97,9 +97,9 @@ def render_last_7_days_sales_chart(df_sales: pd.DataFrame, df_customers: pd.Data
     daily["new_customers"] = pd.to_numeric(daily.get("new_customers", 0), errors="coerce").fillna(0).astype(int)
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(px.bar(daily, x="day_label", y="revenue", color="revenue", title="Last 7 Days Revenue", text_auto=".2s", color_continuous_scale="Tealgrn").update_layout(height=340), use_container_width=True)
+        st.plotly_chart(px.bar(daily, x="day_label", y="revenue", color="revenue", title="Last 7 Days Revenue", text_auto=".2s", color_continuous_scale="Tealgrn").update_layout(height=340), width="stretch")
     with c2:
-        st.plotly_chart(px.line(daily.melt(id_vars=["day_label"], value_vars=["orders", "unique_customers", "new_customers"], var_name="metric", value_name="value"), x="day_label", y="value", color="metric", markers=True, title="Last 7 Days Orders and Customers").update_layout(height=340), use_container_width=True)
+        st.plotly_chart(px.line(daily.melt(id_vars=["day_label"], value_vars=["orders", "unique_customers", "new_customers"], var_name="metric", value_name="value"), x="day_label", y="value", color="metric", markers=True, title="Last 7 Days Orders and Customers").update_layout(height=340), width="stretch")
 def render_sales_overview_timeseries(df_sales: pd.DataFrame, ml_bundle: dict = None):
     """Renders high-fidelity time-series analysis for Sales Overview."""
     st.markdown("#### 📈 Time-Series Performance Analysis")
@@ -131,7 +131,7 @@ def render_sales_overview_timeseries(df_sales: pd.DataFrame, ml_bundle: dict = N
                           color_discrete_sequence=["#4F46E5"])
         fig_rev.update_layout(height=300, margin=dict(l=0, r=0, t=40, b=0), 
                               hovermode="x unified", template="plotly_white")
-        st.plotly_chart(fig_rev, use_container_width=True)
+        st.plotly_chart(fig_rev, width="stretch")
 
     with c2:
         # Order Count Time Series
@@ -141,7 +141,7 @@ def render_sales_overview_timeseries(df_sales: pd.DataFrame, ml_bundle: dict = N
                           color_discrete_sequence=["#10B981"])
         fig_ord.update_layout(height=300, margin=dict(l=0, r=0, t=40, b=0), 
                               hovermode="x unified", template="plotly_white")
-        st.plotly_chart(fig_ord, use_container_width=True)
+        st.plotly_chart(fig_ord, width="stretch")
 
     c3, c4 = st.columns(2)
     with c3:
@@ -152,7 +152,7 @@ def render_sales_overview_timeseries(df_sales: pd.DataFrame, ml_bundle: dict = N
                           color_discrete_sequence=["#F59E0B"])
         fig_units.update_layout(height=300, margin=dict(l=0, r=0, t=40, b=0), 
                               hovermode="x unified", template="plotly_white")
-        st.plotly_chart(fig_units, use_container_width=True)
+        st.plotly_chart(fig_units, width="stretch")
 
     with c4:
         # AOV (Basket Value) Time Series - SUGGESTED
@@ -161,7 +161,7 @@ def render_sales_overview_timeseries(df_sales: pd.DataFrame, ml_bundle: dict = N
                           title="Average Order Value (AOV) Trend",
                           markers=True, line_shape="spline",
                           color_discrete_sequence=["#EC4899"])
-        st.plotly_chart(fig_aov, use_container_width=True)
+        st.plotly_chart(fig_aov, width="stretch")
 
     st.divider()
     render_ml_forecast_charts(daily, ml_bundle=ml_bundle)
@@ -261,4 +261,4 @@ def render_ml_forecast_charts(daily: pd.DataFrame, ml_bundle: dict = None):
                     trace.opacity = 0.6
                      
             fig.update_layout(height=400, margin=dict(l=0, r=0, t=60, b=0), hovermode="x unified", template="plotly_white", showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")

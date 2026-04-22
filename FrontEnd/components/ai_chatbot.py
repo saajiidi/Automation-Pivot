@@ -44,7 +44,7 @@ def floating_chat():
     # Let's use a sidebar docked popover as it's more stable in Streamlit
     with st.sidebar:
         st.divider()
-        with st.popover("🤖 Ask AI Assistant", use_container_width=True):
+        with st.popover("🤖 Ask AI Assistant", width="stretch"):
             st.subheader("DEEN Commerce BI AI")
             st.caption("Ask questions about your sales, inventory, or customers.")
             
@@ -59,7 +59,7 @@ def floating_chat():
                 with st.chat_message(msg["role"]):
                     st.markdown(msg["content"])
                     if "df" in msg and msg["df"] is not None:
-                        st.dataframe(msg["df"], use_container_width=True)
+                        st.dataframe(msg["df"], width="stretch")
 
             # Input
             if prompt := st.chat_input("Type your question...", key="ai_chat_input"):
@@ -78,7 +78,7 @@ def floating_chat():
 
                         st.markdown(answer)
                         if result_df is not None and not result_df.empty:
-                            st.dataframe(result_df, use_container_width=True)
+                            st.dataframe(result_df, width="stretch")
 
                         st.session_state.ai_messages.append({
                             "role": "assistant",

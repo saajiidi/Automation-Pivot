@@ -125,7 +125,7 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
         st.markdown("**Variation Breakdown:**")
         st.dataframe(sniper_results[["Name", "SKU", "_size", "Stock Status", "Stock Quantity", "Price"]].rename(
             columns={"_size": "Dimension"}
-        ), use_container_width=True, hide_index=True)
+        ), width="stretch", hide_index=True)
         st.divider()
 
     st.markdown("#### Inventory Strategic Analysis")
@@ -168,22 +168,22 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
             with v1:
                 # Top-to-less Sort (Already sorted by Selected_Value)
                 fig_donut = ui.donut_chart(cat_agg, values="Selected_Value", names="Category", title=f"Category Share by {val_basis}")
-                st.plotly_chart(fig_donut, use_container_width=True)
+                st.plotly_chart(fig_donut, width="stretch")
             with v2:
                 # Horizontal bar: ascending in code = largest at top in visual
                 fig_val_bar = ui.bar_chart(cat_agg.sort_values("Selected_Value", ascending=True), x="Selected_Value", y="Category", title=f"Absolute {val_basis} per Category", color="Selected_Value")
-                st.plotly_chart(fig_val_bar, use_container_width=True)
+                st.plotly_chart(fig_val_bar, width="stretch")
                 
         with t2:
             v3, v4 = st.columns(2)
             with v3:
                 # Vertical bar: descending
                 fig_unit_bar = ui.bar_chart(cat_agg.sort_values("Total_Units", ascending=True), x="Total_Units", y="Category", title="Total Unit Volume per Category", color="Total_Units")
-                st.plotly_chart(fig_unit_bar, use_container_width=True)
+                st.plotly_chart(fig_unit_bar, width="stretch")
             with v4:
                 # Vertical bar: descending
                 fig_sku_bar = ui.bar_chart(cat_agg.sort_values("SKU_Count", ascending=True), x="SKU_Count", y="Category", title="SKU Breadth per Category", color="SKU_Count")
-                st.plotly_chart(fig_sku_bar, use_container_width=True)
+                st.plotly_chart(fig_sku_bar, width="stretch")
 
         with t3:
             st.markdown("##### 🚀 Velocity-Based Inventory Planning")
@@ -205,7 +205,7 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
                 st.warning(f"Found {len(crit_items)} items that will stock out within 7 days.")
                 st.dataframe(crit_items[["Name", "Stock Quantity", "daily_velocity", "days_remaining", "Trend", "Status"]].rename(
                     columns={"daily_velocity": "Daily Velocity", "days_remaining": "Days of Stock"}
-                ), use_container_width=True, hide_index=True)
+                ), width="stretch", hide_index=True)
             else:
                 st.success("All stock levels are stable based on current velocity.")
 
@@ -225,7 +225,7 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
                 
                 st.dataframe(dead_stock[["Name", "Category", "Stock Quantity", "Value", "Trend"]].rename(
                     columns={"Value": "Capital Locked"}
-                ).sort_values("Capital Locked", ascending=False), use_container_width=True, hide_index=True)
+                ).sort_values("Capital Locked", ascending=False), width="stretch", hide_index=True)
             else:
                 st.success("No significant dead stock detected for this period.")
     else:
@@ -245,5 +245,5 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
             data=excel_bytes,
             file_name=f"deen_inventory_{datetime.now().strftime('%Y%m%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            width="stretch"
         )

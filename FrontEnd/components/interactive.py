@@ -49,14 +49,14 @@ def floating_action_bar(
         if secondary_label and secondary_key:
             c1, c2 = st.columns([2, 1])
             primary_clicked = c1.button(
-                primary_label, type="primary", use_container_width=True, key=primary_key
+                primary_label, type="primary", width="stretch", key=primary_key
             )
             secondary_clicked = c2.button(
-                secondary_label, use_container_width=True, key=secondary_key
+                secondary_label, width="stretch", key=secondary_key
             )
         else:
             primary_clicked = st.button(
-                primary_label, type="primary", use_container_width=True, key=primary_key
+                primary_label, type="primary", width="stretch", key=primary_key
             )
             secondary_clicked = False
     return primary_clicked, secondary_clicked

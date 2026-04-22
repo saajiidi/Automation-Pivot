@@ -83,7 +83,7 @@ def render_war_room_page(sales_df: pd.DataFrame, returns_df: pd.DataFrame):
             }
         ))
         fig.update_layout(height=180, margin=dict(l=20,r=20,t=40,b=20), paper_bgcolor="rgba(0,0,0,0)")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.divider()
 
@@ -101,7 +101,7 @@ def render_war_room_page(sales_df: pd.DataFrame, returns_df: pd.DataFrame):
         display_df['recency'] = display_df['recency'].astype(str) + " days ago"
         display_df.columns = ["Customer Key", "Last Purchase", "Orders", "Total Value", "Segments", "Risk Level"]
         
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width="stretch", hide_index=True)
         
         c1, c2 = st.columns([1, 1])
         with c1:
@@ -111,7 +111,7 @@ def render_war_room_page(sales_df: pd.DataFrame, returns_df: pd.DataFrame):
                 csv,
                 "high_risk_vips.csv",
                 "text/csv",
-                use_container_width=True
+                width="stretch"
             )
         with c2:
-            st.button("🔔 Send Retention Notification (Mock)", use_container_width=True, disabled=True)
+            st.button("🔔 Send Retention Notification (Mock)", width="stretch", disabled=True)

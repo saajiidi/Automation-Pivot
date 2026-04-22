@@ -50,14 +50,14 @@ def render_acquisition_analytics(df_sales: pd.DataFrame):
         # Sessions by Channel
         fig_sess = px.pie(df_chan, values='Sessions', names='Channel', title="Traffic Source Mix",
                           hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-        st.plotly_chart(fig_sess, use_container_width=True)
+        st.plotly_chart(fig_sess, width="stretch")
         
     with col_b:
         # CVR by Channel
         fig_cvr = px.bar(df_chan.sort_values('CVR', ascending=False), x='CVR', y='Channel', 
                          title="Conversion Rate by Channel (%)",
                          orientation='h', color='CVR', color_continuous_scale='Teal')
-        st.plotly_chart(fig_cvr, use_container_width=True)
+        st.plotly_chart(fig_cvr, width="stretch")
 
     st.divider()
 
@@ -75,7 +75,7 @@ def render_acquisition_analytics(df_sales: pd.DataFrame):
         marker={"color": ["#636EFA", "#EF553B", "#00CC96", "#AB63FA"]}
     ))
     fig_funnel.update_layout(title="Site-wide Conversion Pipeline", margin=dict(l=20, r=20, t=40, b=20))
-    st.plotly_chart(fig_funnel, use_container_width=True)
+    st.plotly_chart(fig_funnel, width="stretch")
 
     # Simulate time series
     df_ts_base = df_sales[df_sales['order_date'].notna()].copy()
@@ -96,6 +96,6 @@ def render_acquisition_analytics(df_sales: pd.DataFrame):
     fig_mix = px.area(df_ts, x="Date", y="Sessions", color="Traffic Type", 
                        title="Daily Session Volume (Retention Adjusted)",
                        color_discrete_map={"New": "#3B82F6", "Returning": "#10B981"})
-    st.plotly_chart(fig_mix, use_container_width=True)
+    st.plotly_chart(fig_mix, width="stretch")
     
     st.caption("⚠️ Acquisition data is currently derived from your conversion engine. GA4 integration pending.")
