@@ -42,81 +42,39 @@ logger = get_logger("customer_insight_page")
 
 
 def _render_metric_cards(metrics: Dict[str, Any]) -> None:
-    """Render consistent, modern metric cards using custom HTML/CSS."""
-    
-    # Custom CSS for consistent fixed-height cards
-    st.markdown("""
-        <style>
-        .insight-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 16px;
-            text-align: center;
-            transition: transform 0.2s, background 0.2s;
-            height: 140px;
-            min-height: 140px;
-            max-height: 140px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            overflow: hidden;
-            box-sizing: border-box;
-        }
-        .insight-card:hover {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            transform: translateY(-2px);
-        }
-        .insight-value {
-            font-size: 1.8rem;
-            font-weight: 800;
-            color: #ffffff;
-            margin: 0;
-            line-height: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .insight-label {
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: #94a3b8;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-top: 8px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .insight-delta {
-            font-size: 0.75rem;
-            margin-top: 4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    """Render consistent, modern metric cards using enterprise components."""
+    from FrontEnd.components import ui
     
     cols = st.columns(4)
     
-    card_data = [
-        {"label": "👥 Total Customers", "value": f"{metrics['total_customers']:,}", "sub": "Lifetime Base", "color": "#3b82f6"},
-        {"label": "✨ New Customers", "value": f"{metrics['new_customers']:,}", "sub": "Acquired in Range", "color": "#10b981"},
-        {"label": "🔥 Active Customers", "value": f"{metrics['active_customers']:,}", "sub": "Orders in Range", "color": "#f59e0b"},
-        {"label": "🔄 Return Impact", "value": f"{metrics['return_count']:,}", "sub": "Returned Orders", "color": "#ef4444"},
-    ]
-    
-    for i, card in enumerate(card_data):
-        with cols[i]:
-            st.markdown(f"""
-                <div class="insight-card">
-                    <div class="insight-value" style="color: {card['color']}">{card['value']}</div>
-                    <div class="insight-label">{card['label']}</div>
-                    <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{card['sub']}</div>
-                </div>
-            """, unsafe_allow_html=True)
+    with cols[0]:
+        ui.metric_highlight(
+            label="Total Customers",
+            value=f"{metrics['total_customers']:,}",
+            help_text="Lifetime Base",
+            icon="👥"
+        )
+    with cols[1]:
+        ui.metric_highlight(
+            label="New Customers",
+            value=f"{metrics['new_customers']:,}",
+            help_text="Acquired in Range",
+            icon="✨"
+        )
+    with cols[2]:
+        ui.metric_highlight(
+            label="Active Customers",
+            value=f"{metrics['active_customers']:,}",
+            help_text="Orders in Range",
+            icon="🔥"
+        )
+    with cols[3]:
+        ui.metric_highlight(
+            label="Return Impact",
+            value=f"{metrics['return_count']:,}",
+            help_text="Returned Orders",
+            icon="🔄"
+        )
 
 def render_customer_insight_page() -> None:
     """Render the main Customer Insight page with tabbed interface.

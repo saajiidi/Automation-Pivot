@@ -1609,6 +1609,35 @@ def calculate_net_sales_metrics(
     estimated_returned_items = int(unique_orders["_estimated_item_qty"].sum())
     daily_financials = _build_daily_financials(unique_orders, sales_context)
 
+    # ── Calculate Category-Level Yield ──
+    category_yield = {}
+    if not sales_context.empty and "Category" in sales_context.columns:
+        gross_by_cat = sales_context.groupby("Category")["_line_revenue"].sum()
+        loss_by_cat_list = []
+        for idx, row in returns_df.iterrows():
+            items = row.get("returned_items", [])
+            if not isinstance(items, list): continue
+            for item in items:
+                if not isinstance(item, dict): continue
+                loss_by_cat_list.append({
+                    "category": item.get("category", "General"),
+                    "loss": item.get("revenue_impact", 0)
+                })
+        loss_by_cat_df = pd.DataFrame(loss_by_cat_list)
+        if not loss_by_cat_df.empty:
+            loss_by_cat = loss_by_cat_df.groupby("category")["loss"].sum()
+        else:
+            loss_by_cat = pd.Series(0.0, index=gross_by_cat.index)
+        for cat in gross_by_cat.index:
+            g_val = float(gross_by_cat.get(cat, 0.0))
+            l_val = float(loss_by_cat.get(cat, 0.0))
+            category_yield[str(cat)] = {
+                "gross": g_val,
+                "loss": l_val,
+                "net": g_val - l_val,
+                "yield": ((g_val - l_val) / g_val * 100) if g_val > 0 else 0.0
+            }
+
     # ── Fix percentage calculations with correct denominators ──
     # returned_orders_pct: % of unique orders that had returns (use already-defined scalar)
     returned_orders_pct_fixed = (return_count / total_orders_scalar * 100) if total_orders_scalar > 0 else 0.0

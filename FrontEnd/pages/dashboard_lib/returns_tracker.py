@@ -14,7 +14,20 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from streamlit_autorefresh import st_autorefresh
-from streamlit.runtime.scriptrunner import add_script_run_context
+# Robust Streamlit Context Import
+try:
+    from streamlit.runtime.scriptrunner import add_script_run_context as add_ctx
+except ImportError:
+    try:
+        from streamlit.runtime.scriptrunner.script_run_context import add_script_run_context as add_ctx
+    except ImportError:
+        try:
+            from streamlit.runtime.scriptrunner_utils.script_run_context import add_script_run_ctx as add_ctx
+        except ImportError:
+            def add_ctx(thread): return thread
+
+def add_script_run_context(thread):
+    return add_ctx(thread)
 
 from BackEnd.services.returns_tracker import (
     load_returns_data,
@@ -123,40 +136,36 @@ def render_returns_tracker_page() -> None:
     # ── Auto Data Sync ──
     sales_df_full = _get_gross_sales_context()
     sales_df = _filter_sales_by_date_range(sales_df_full, start_dt, end_dt)
+    # ── Trigger Load if Needed ──
     sync_window = get_current_sync_window()
-    
-    # Trigger background load if needed
     needs_load = "returns_data" not in st.session_state or st.session_state.get("last_returns_sync") != sync_window
     is_loading = st.session_state.get("returns_loading", False)
+    is_complete = st.session_state.get("returns_load_complete", False)
 
     if needs_load and not is_loading:
-        # Start background thread
-        st.session_state["returns_loading"] = True
-        thread = Thread(target=_load_returns_async, args=(sync_window, sales_df_full), daemon=True)
-        add_script_run_context(thread)
-        thread.start()
+        _trigger_background_load(sync_window, sales_df_full)
         st.rerun()
 
-    # ── Staged Loading Display ──
-    if st.session_state.get("returns_loading", False) and "returns_data" not in st.session_state:
-        # Phase 1: Show skeletons while data is being prepared
-        st.info("📊 Syncing delivery-issue data from Google Sheets in the background...")
-        ui.skeleton_row(count=4)
-        st.markdown("<br>", unsafe_allow_html=True)
-        ui.skeleton_row(count=3)
-        
+    # 1. Render skeleton if loading AND no data exists yet
+    if is_loading and "returns_data" not in st.session_state:
+        _render_skeleton()
         # Poll for completion
+        from streamlit_autorefresh import st_autorefresh
         st_autorefresh(interval=3000, key="returns_sync_refresh")
         return
 
-    # Data is available (either from this sync or previous one)
+    # 2. Handle missing data case
     if "returns_data" not in st.session_state or st.session_state.returns_data.empty:
-        st.info("📊 No Returns Data available. Check the source connection.")
+        if not is_loading:
+            st.info("📊 No Returns Data available. Try a Force Refresh or check the source connection.")
+        else:
+            _render_skeleton()
         return
 
-    # If still loading but we have OLD data, show a small indicator
-    if st.session_state.get("returns_loading", False):
+    # 3. Data is available - If still refreshing in background, show indicator
+    if is_loading:
         st.caption("🔄 Data is refreshing in the background... showing cached snapshot.")
+        from streamlit_autorefresh import st_autorefresh
         st_autorefresh(interval=5000, key="returns_background_refresh")
 
     df = st.session_state.returns_data.copy()
@@ -479,8 +488,9 @@ def _render_charts(df: pd.DataFrame, metrics: dict, sales_df: pd.DataFrame) -> N
         st.info("📊 Charts will appear once return data is loaded.")
         return
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📈 Monthly Trends",
+        "🎯 Category Insights",
         "🥧 Return Reasons",
         "📦 Product Heatmap",
         "🛡️ Customer Recovery",
@@ -492,19 +502,90 @@ def _render_charts(df: pd.DataFrame, metrics: dict, sales_df: pd.DataFrame) -> N
         _render_monthly_trend(df)
 
     with tab2:
-        _render_reason_charts(metrics)
+        _render_category_insights(metrics)
 
     with tab3:
-        _render_product_heatmap(df)
+        _render_reason_charts(metrics)
 
     with tab4:
-        _render_customer_recovery(df, sales_df)
+        _render_product_heatmap(df)
 
     with tab5:
-        _render_return_inventory(df, sales_df)
+        _render_customer_recovery(df, sales_df)
 
     with tab6:
+        _render_return_inventory(df, sales_df)
+
+    with tab7:
         _render_returned_items_list(df)
+
+
+def _render_category_insights(metrics: dict) -> None:
+    """Render Yield-by-Category visualization."""
+    cat_yield = metrics.get("category_yield", {})
+    if not cat_yield:
+        st.info("🎯 Category insights will appear once return data is fully processed.")
+        return
+
+    # Convert to DataFrame for plotting
+    plot_data = []
+    for cat, data in cat_yield.items():
+        if data["gross"] > 0: # Only show categories with sales
+            plot_data.append({
+                "Category": cat,
+                "Gross Sales": data["gross"],
+                "Return Loss": data["loss"],
+                "Net Sales": data["net"],
+                "Yield %": data["yield"]
+            })
+    
+    if not plot_data:
+        st.info("Not enough category data for visualization.")
+        return
+
+    df_plot = pd.DataFrame(plot_data).sort_values("Yield %", ascending=True)
+
+    st.markdown("### 🎯 Net Yield by Product Category")
+    st.caption("Lower yield indicates higher return impact. Focus quality control on these categories.")
+
+    import plotly.express as px
+    fig = px.bar(
+        df_plot,
+        x="Yield %", y="Category",
+        orientation="h",
+        color="Yield %",
+        color_continuous_scale="RdYlGn",
+        range_color=[min(70, df_plot["Yield %"].min()), 100],
+        text=df_plot["Yield %"].apply(lambda x: f"{x:.1f}%"),
+        title="Revenue Yield Efficiency (Net / Gross)",
+        labels={"Yield %": "Net Yield %"},
+        hover_data=["Gross Sales", "Return Loss", "Net Sales"]
+    )
+
+    fig.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif"),
+        height=400,
+        margin=dict(l=0, r=20, t=50, b=0),
+    )
+    fig.update_traces(textposition='outside')
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Detailed table
+    with st.expander("📊 Detailed Category Financials"):
+        st.dataframe(
+            df_plot.sort_values("Gross Sales", ascending=False),
+            column_config={
+                "Gross Sales": st.column_config.NumberColumn(format="৳%d"),
+                "Return Loss": st.column_config.NumberColumn(format="৳%d"),
+                "Net Sales": st.column_config.NumberColumn(format="৳%d"),
+                "Yield %": st.column_config.ProgressColumn(format="%.1f%%", min_value=0, max_value=100)
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+
 
 
 def _render_monthly_trend(df: pd.DataFrame) -> None:
@@ -1294,3 +1375,71 @@ def _generate_excel_report(df: pd.DataFrame, metrics: dict) -> bytes:
             pass
 
     return buffer.getvalue()
+
+
+# ═══════════════════════════════════════════════════════════════════
+    # ── SKELETON & BACKGROUND HELPERS ──
+# ═══════════════════════════════════════════════════════════════════
+
+def _render_skeleton():
+    """Render a premium skeleton UI for the returns tracker."""
+    from FrontEnd.components import ui
+    
+    st.markdown("### 📦 Returns Intelligence Hub")
+    st.caption("Initializing financial attribution and item-matching engine...")
+    
+    # KPI Row
+    ui.skeleton_row(count=4)
+    
+    # Impact Row
+    st.markdown("#### 💰 Financial Integrity & Yield")
+    col1, col2, col3 = st.columns(3)
+    with col1: ui.skeleton_metric(icon="💰")
+    with col2: ui.skeleton_metric(icon="📊")
+    with col3: ui.skeleton_metric(icon="📉")
+    
+    # Chart Skeleton
+    st.markdown("---")
+    st.markdown("#### 📈 Analytics Trends")
+    st.markdown("""
+        <div style="height: 300px; background: rgba(255,255,255,0.05); border-radius: 12px; 
+        display: flex; align-items: center; justify-content: center; border: 1px dashed rgba(255,255,255,0.1);">
+            <div style="color: #64748b; font-size: 0.9rem;">Attributing returns to orders...</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+
+def _trigger_background_load(sync_window: str, sales_df: pd.DataFrame):
+    """Trigger the background loading thread."""
+    from threading import Thread
+    # Note: add_script_run_context is imported at module level
+    
+    st.session_state["returns_loading"] = True
+    st.session_state["returns_load_complete"] = False
+    
+    thread = Thread(
+        target=_load_returns_async, 
+        args=(sync_window, sales_df), 
+        daemon=True
+    )
+    add_script_run_context(thread)
+    thread.start()
+
+
+def _load_returns_async(window: str, sales_df: pd.DataFrame):
+    """Background worker for returns data loading."""
+    try:
+        # Avoid circular import
+        from BackEnd.services.returns_tracker import load_returns_data
+        
+        df = load_returns_data(sync_window=window, sales_df=sales_df)
+        
+        # Update session state safely
+        st.session_state.returns_data = df
+        st.session_state["last_returns_sync"] = window
+        st.session_state["returns_load_complete"] = True
+    except Exception as e:
+        from BackEnd.core.logging_config import get_logger
+        get_logger("returns_tracker_ui").exception("Background returns load failed")
+    finally:
+        st.session_state["returns_loading"] = False

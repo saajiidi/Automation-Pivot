@@ -9,6 +9,23 @@ from pathlib import Path
 import subprocess
 import sys
 from typing import Optional
+from threading import Thread
+# Robust Streamlit Context Import
+try:
+    from streamlit.runtime.scriptrunner import add_script_run_context as add_ctx
+except ImportError:
+    try:
+        from streamlit.runtime.scriptrunner.script_run_context import add_script_run_context as add_ctx
+    except ImportError:
+        try:
+            from streamlit.runtime.scriptrunner_utils.script_run_context import add_script_run_ctx as add_ctx
+        except ImportError:
+            # Fallback to no-op if all fail
+            def add_ctx(thread): return thread
+
+def add_script_run_context(thread):
+    """Unified wrapper for Streamlit's internal thread context attachment."""
+    return add_ctx(thread)
 
 import pandas as pd
 import requests
@@ -379,30 +396,42 @@ def load_full_woocommerce_history(end_date: Optional[str] = None) -> pd.DataFram
     return merged.sort_values("order_date", ascending=False, na_position="last").reset_index(drop=True)
 
 
+def _run_refresh_worker_thread(kind: str, start_date: Optional[str] = None, end_date: Optional[str] = None, days: int = 30):
+    """Internal thread worker function."""
+    try:
+        if kind == "orders":
+            refresh_woocommerce_orders_cache(
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        elif kind == "full_history":
+            refresh_woocommerce_orders_cache(
+                days=days,
+                start_date=None,
+                end_date=end_date,
+                full_sync=True,
+            )
+        elif kind == "stock":
+            refresh_woocommerce_stock_cache()
+    except Exception as exc:
+        log_error(exc, context=f"Background {kind} Refresh Thread")
+
+
 def _spawn_refresh_worker(kind: str, start_date: Optional[str] = None, end_date: Optional[str] = None, days: int = 30) -> bool:
-    worker_path = Path(__file__).with_name("cache_refresh_worker.py")
-    if not worker_path.exists():
+    """Spawns a background thread to refresh the cache. Ensuring it has Streamlit context for secrets."""
+    try:
+        thread = Thread(
+            target=_run_refresh_worker_thread,
+            args=(kind, start_date, end_date, days),
+            daemon=True
+        )
+        add_script_run_context(thread)
+        thread.start()
+        return True
+    except Exception as exc:
+        log_error(exc, context="Background Refresh Thread Spawn")
         return False
-
-    command = [sys.executable, str(worker_path), kind, "--days", str(days)]
-    if start_date:
-        command.extend(["--start-date", start_date])
-    if end_date:
-        command.extend(["--end-date", end_date])
-
-    creationflags = (
-        getattr(subprocess, "DETACHED_PROCESS", 0)
-        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    )
-    subprocess.Popen(
-        command,
-        cwd=str(Path(__file__).parent.parent.parent),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=creationflags,
-    )
-    return True
 
 
 def start_orders_background_refresh(

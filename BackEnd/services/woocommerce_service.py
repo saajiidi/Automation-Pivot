@@ -7,20 +7,31 @@ from urllib.parse import urlparse
 
 
 def get_woocommerce_credentials() -> dict[str, str]:
-    """Safely load WooCommerce credentials from Streamlit secrets."""
+    """Safely load WooCommerce credentials from Streamlit secrets or environment variables."""
+    import os
+    
+    # 1. Try Streamlit secrets first
     try:
         woo = st.secrets.get("woocommerce", {})
+        if woo:
+            credentials = dict(woo)
+            required = {"store_url", "consumer_key", "consumer_secret"}
+            if required.issubset(credentials):
+                return credentials
     except Exception:
-        return {}
+        pass
 
-    if not woo:
-        return {}
+    # 2. Fallback to environment variables
+    env_credentials = {
+        "store_url": os.getenv("WOOCOMMERCE_STORE_URL"),
+        "consumer_key": os.getenv("WOOCOMMERCE_CONSUMER_KEY"),
+        "consumer_secret": os.getenv("WOOCOMMERCE_CONSUMER_SECRET")
+    }
+    
+    if all(env_credentials.values()):
+        return env_credentials
 
-    credentials = dict(woo)
-    required = {"store_url", "consumer_key", "consumer_secret"}
-    if not required.issubset(credentials):
-        return {}
-    return credentials
+    return {}
 
 
 def get_woocommerce_store_label() -> str:
