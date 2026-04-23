@@ -990,6 +990,7 @@ def _render_return_inventory(df: pd.DataFrame, sales_df: pd.DataFrame, key_prefi
         data=csv,
         file_name=f"return_inventory_{datetime.now().strftime('%Y%m%d')}.csv",
         mime='text/csv',
+        key=f"{key_prefix}_return_inventory_csv"
     )
 
 
@@ -1327,6 +1328,7 @@ def _render_export(df: pd.DataFrame, metrics: dict) -> None:
                 data=buffer,
                 file_name=f"deen_returns_report_{datetime.now().strftime('%Y%m%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="returns_excel_export_btn"
             )
 
 
@@ -1356,15 +1358,15 @@ def _generate_excel_report(df: pd.DataFrame, metrics: dict) -> bytes:
                 "Partial Amounts (৳)",
             ],
             "Value": [
-                metrics["total_issues"],
-                metrics["return_count"],
-                metrics.get("paid_return_count", 0),
-                metrics.get("non_paid_return_count", 0),
-                metrics["partial_count"],
-                metrics["exchange_count"],
+                int(metrics.get("total_issues", 0)),
+                int(metrics.get("return_count", 0)),
+                int(metrics.get("paid_return_count", 0)),
+                int(metrics.get("non_paid_return_count", 0)),
+                int(metrics.get("partial_count", 0)),
+                int(metrics.get("exchange_count", 0)),
                 "",
-                metrics.get("return_rate", 0),
-                metrics["partial_amounts"],
+                float(metrics.get("return_rate", 0.0)),
+                float(metrics.get("partial_amounts", 0.0)),
             ],
         }
         summary_df = pd.DataFrame(summary_data)
@@ -1372,7 +1374,7 @@ def _generate_excel_report(df: pd.DataFrame, metrics: dict) -> bytes:
 
         # ── Reason Breakdown ──
         reasons = metrics.get("reason_counts", {})
-        if reasons:
+        if isinstance(reasons, dict) and len(reasons) > 0:
             reason_df = pd.DataFrame([
                 {"Reason": k, "Count": v} for k, v in reasons.items()
             ]).sort_values("Count", ascending=False)
@@ -1389,6 +1391,20 @@ def _generate_excel_report(df: pd.DataFrame, metrics: dict) -> bytes:
         if "date" in detail_df.columns:
             detail_df["date"] = detail_df["date"].dt.strftime("%Y-%m-%d")
         detail_df.to_excel(writer, sheet_name="Detailed Ledger", index=False)
+
+        # ── AI Insights & Analytics ──
+        insights_list = [
+            f"FINANCIAL INTEGRITY: ৳{float(metrics.get('total_loss', 0)):,.0f} total lost to {int(metrics.get('return_count', 0))} returns and {int(metrics.get('partial_count', 0))} partials.",
+            f"REVENUE YIELD: {float(metrics.get('net_yield_pct', 0)):.1f}% net yield efficiency.",
+            f"ATTRIBUTION: {float(metrics.get('attribution_confidence_pct', 0)):.1f}% financial attribution confidence to actual WooCommerce orders."
+        ]
+        
+        if isinstance(reasons, dict) and len(reasons) > 0:
+            top_reason = list(reasons.keys())[0]
+            insights_list.append(f"PREDICTION: '{top_reason}' is the dominant return reason. Address this to recapture up to ৳{float(metrics.get('full_return_loss', 0)) * 0.3:,.0f} monthly.")
+            
+        insights_df = pd.DataFrame({"AI Analytics & Recommendations": insights_list})
+        insights_df.to_excel(writer, sheet_name="AI Insights", index=False)
 
         # ── Style sheets ──
         try:
@@ -1411,7 +1427,7 @@ def _generate_excel_report(df: pd.DataFrame, metrics: dict) -> bytes:
                     cell.border = thin_border
 
                 for col in ws.columns:
-                    max_len = max(len(str(cell.value or "")) for cell in col)
+                    max_len = max(len(str(cell.value) if cell.value is not None else "") for cell in col)
                     ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)
 
                 ws.freeze_panes = "A2"

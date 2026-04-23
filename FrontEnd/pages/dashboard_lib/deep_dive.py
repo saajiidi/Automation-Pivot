@@ -233,7 +233,7 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
     
     fig_ts.update_layout(
         hovermode="x unified",
-        xaxis=dict(showgrid=False),
+        xaxis=dict(showgrid=False, rangeslider=dict(visible=True, thickness=0.06)),
         yaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.05)"),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)"
@@ -277,10 +277,17 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
         # 2. Prepare Data Sheet
         export_df = w_df.drop(columns=[col for col in w_df.columns if col.startswith("_")], errors="ignore")
         
-        # 3. Enhanced Multi-Sheet Export
+        # 3. Compile AI Strategic Intelligence
+        ai_narrative = [
+            f"STRATEGIC OVERVIEW: This filtered cluster generated ৳{total_revenue:,.0f} across {unique_customers:,} unique buyers.",
+            f"BASKET DYNAMICS: Bulk buying (3+ units) accounts for {p_bulk:.1f}% of transactions." if 'p_bulk' in locals() else "",
+            f"BASKET DYNAMICS: Single-item purchases make up {p_single:.1f}% of transactions." if 'p_single' in locals() else "",
+            f"DOMINANT VARIATION: {top_var_name} is driving the cluster with {top_var_units} units sold."
+        ]
+        ai_df = pd.DataFrame({"AI Strategic Intelligence": [n for n in ai_narrative if n]})
+        
         from FrontEnd.components.data_display import export_to_excel
-        # We'll use a local helper for multi-sheet if needed, but let's see if we can just use the existing one or expand it
-        report_bytes = ui.export_to_excel(export_df, "Cluster Data", additional_sheets={"Summary": summary_df})
+        report_bytes = ui.export_to_excel(export_df, "Cluster Data", additional_sheets={"Summary": summary_df, "AI Insights": ai_df})
         
         st.download_button(
             label="📊 Export Strategic Analysis",

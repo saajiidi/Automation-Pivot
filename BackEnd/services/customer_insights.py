@@ -296,7 +296,7 @@ def calculate_rfm_scores(df: pd.DataFrame) -> pd.DataFrame:
 def _enrich_with_returns(customers_df: pd.DataFrame, full_history_df: pd.DataFrame) -> pd.DataFrame:
     """Enrich customers DataFrame with return rate metrics."""
     returns_df = st.session_state.get("returns_data", pd.DataFrame())
-    if returns_df.empty or full_history_df.empty:
+    if returns_df is None or returns_df.empty or full_history_df is None or full_history_df.empty:
         customers_df["return_count"] = 0
         customers_df["return_rate"] = 0.0
         return customers_df

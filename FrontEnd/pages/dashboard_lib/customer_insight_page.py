@@ -468,23 +468,42 @@ def _render_legacy_insights(df_sales: pd.DataFrame) -> None:
         st.warning("No customer segments identified in this period.")
         return
     
-    # Visual Segments (keep this - it works)
-    st.markdown("### 📊 Value Segments")
-    mix_df = df["segment"].value_counts().reset_index()
-    mix_df.columns = ["Segment", "Count"]
+    # Visual Segments and Retention
+    t_seg, t_coh = st.tabs(["📊 Value Segments", "📅 Retention Cohorts"])
     
-    c1, c2 = st.columns(2)
-    with c1:
-        st.plotly_chart(
-            ui.donut_chart(mix_df, values="Count", names="Segment", title="Segment Distribution"),
-            width="stretch"
-        )
-    with c2:
-        rev_df = df.groupby("segment")["total_revenue"].sum().reset_index().sort_values("total_revenue", ascending=False)
-        st.plotly_chart(
-            ui.bar_chart(rev_df, x="total_revenue", y="segment", title="Revenue by Segment", color_scale="Tealgrn"),
-            width="stretch"
-        )
+    with t_seg:
+        st.markdown("### 📊 Value Segments")
+        mix_df = df["segment"].value_counts().reset_index()
+        mix_df.columns = ["Segment", "Count"]
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.plotly_chart(
+                ui.donut_chart(mix_df, values="Count", names="Segment", title="Segment Distribution"),
+                width="stretch"
+            )
+        with c2:
+            rev_df = df.groupby("segment")["total_revenue"].sum().reset_index().sort_values("total_revenue", ascending=False)
+            st.plotly_chart(
+                ui.bar_chart(rev_df, x="total_revenue", y="segment", title="Revenue by Segment", color_scale="Tealgrn"),
+                width="stretch"
+            )
+            
+    with t_coh:
+        st.markdown("### 📅 Customer Retention Cohorts")
+        st.caption("Percentage of customers returning in subsequent months after their first purchase.")
+        cohort_df = generate_cohort_matrix(df_sales, period='M')
+        if not cohort_df.empty:
+            import plotly.express as px
+            cohort_df.index = cohort_df.index.astype(str)  # Format period index for Plotly
+            fig_coh = px.imshow(
+                cohort_df, text_auto=".1f", aspect="auto", color_continuous_scale="Tealgrn",
+                labels=dict(x="Months Since First Order", y="Cohort Month", color="Retention %"),
+            )
+            fig_coh.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+            st.plotly_chart(fig_coh, use_container_width=True)
+        else:
+            st.info("Insufficient longitudinal data to generate retention cohorts.")
 
 
 def _render_compact_results(filters: Dict[str, Any]) -> None:

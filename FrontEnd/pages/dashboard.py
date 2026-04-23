@@ -508,11 +508,27 @@ def render_intelligence_hub_page():
             cat_df["Sub-Category"] = cat_df["Category"].apply(get_subcategory_name)
             top_cats = cat_df.groupby("Sub-Category")["item_revenue"].sum().reset_index().sort_values("item_revenue", ascending=False).head(10)
             
+            ai_insights = pd.DataFrame({"Executive Narrative & Intelligence Briefing": all_points})
+            
+            additional_sheets = {
+                "Top Categories": top_cats,
+                "AI Briefing": ai_insights
+            }
+            
+            if data.get("ml") and "forecast" in data["ml"]:
+                fc = data["ml"]["forecast"]
+                if not fc.empty:
+                    additional_sheets["ML Forecasts"] = fc[["item_name", "forecast_7d_units", "risk_level", "reorder_comment"]]
+            if data.get("ml") and "anomalies" in data["ml"]:
+                an = data["ml"]["anomalies"]
+                if not an.empty:
+                    additional_sheets["Detected Anomalies"] = an[["order_day", "metric", "direction", "commentary"]]
+            
             report_bytes = ui.export_to_excel(
                 data["sales_active"].drop(columns=[c for c in data["sales_active"].columns if c.startswith("_")], errors="ignore"),
                 sheet_name="Sales Data",
                 summary_metrics=summary_metrics,
-                additional_sheets={"Top Categories": top_cats}
+                additional_sheets=additional_sheets
             )
             
             st.download_button(

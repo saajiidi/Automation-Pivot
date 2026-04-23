@@ -22,9 +22,14 @@ def render_war_room_page(sales_df: pd.DataFrame, returns_df: pd.DataFrame):
             color = "#ef4444" if anomaly['level'] == "CRITICAL" else "#f59e0b"
             with st.container():
                 st.markdown(f"""
-                <div style="background:rgba(255,255,255,0.05); border-left: 5px solid {color}; padding: 15px; border-radius: 8px; margin-bottom: 12px;">
+                <style>
+                .anomaly-card:hover {{ transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.1); }}
+                .anomaly-card {{ transition: all 0.2s ease-in-out; }}
+                </style>
+                <div class="anomaly-card" style="background:var(--secondary-background-color); border: 1px solid rgba(128,128,128,0.1); border-left: 5px solid {color}; padding: 15px; border-radius: 8px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                     <div style="display:flex; justify-content:space-between;">
                         <span style="font-weight:800; color:{color}; text-transform:uppercase; font-size:0.75rem;">{anomaly['category']} | {anomaly['level']}</span>
+                        <span style="background:{color}20; color:{color}; padding: 2px 8px; border-radius: 12px; font-size:0.7rem; font-weight:700;">Action Required</span>
                     </div>
                     <div style="font-size:1.1rem; font-weight:700; margin: 5px 0;">{anomaly['title']}</div>
                     <div style="font-size:0.85rem; opacity:0.8;">{anomaly['description']}</div>
@@ -48,8 +53,8 @@ def render_war_room_page(sales_df: pd.DataFrame, returns_df: pd.DataFrame):
         
     with col2:
         # Base metrics (Mocked or calculated from current window)
-        current_rev = sales_df['item_revenue'].sum() if not sales_df.empty else 1000000
-        current_ret_rate = (len(returns_df) / len(sales_df['order_id'].unique()) * 100) if not sales_df.empty and not returns_df.empty else 12.0
+        current_rev = sales_df['item_revenue'].sum() if sales_df is not None and not sales_df.empty else 1000000
+        current_ret_rate = (len(returns_df) / len(sales_df['order_id'].unique()) * 100) if sales_df is not None and not sales_df.empty and returns_df is not None and not returns_df.empty else 12.0
         
         # Simulation Logic
         sim_rev = current_rev * (1 + rev_growth/100)
