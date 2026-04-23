@@ -12,7 +12,6 @@ from .customer_insights import (
     classify_rfm_segments,
 )
 from .hybrid_data_loader import load_hybrid_data, get_data_summary
-from .processor import process_orders_dataframe as process_data
 
 __all__ = [
     "generate_customer_insights",
@@ -23,5 +22,4 @@ __all__ = [
     "classify_rfm_segments",
     "load_hybrid_data",
     "get_data_summary",
-    "process_data",
 ]

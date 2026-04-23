@@ -16,6 +16,5 @@ joblib>=1.4.0
 patsy>=1.0.0
 
 # UI & Interaction
-streamlit-elements>=0.1.0
 streamlit-autorefresh>=1.0.1
 woocommerce>=3.0.0

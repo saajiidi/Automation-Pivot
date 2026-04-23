@@ -3,8 +3,6 @@ import os
 from datetime import datetime, timedelta
 import pandas as pd
 
-# Suppress SyntaxWarning from streamlit_elements library (known issue)
-warnings.filterwarnings("ignore", category=SyntaxWarning, module="streamlit_elements")
 import streamlit as st
 import numpy as np
 from streamlit_autorefresh import st_autorefresh
