@@ -6,8 +6,6 @@ PRIMARY_NAV = [
     "📥 Sales Data Ingestion",
     "📦 Current Stock Analytics",
     "📊 Inventory Distribution",
-    "💬 WhatsApp Messaging",
-    "🧩 Delivery Data Parser",
 ]
 
 MORE_TOOLS = [

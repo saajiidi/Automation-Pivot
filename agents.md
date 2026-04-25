@@ -49,15 +49,14 @@ DEEN-BI/
 │   │   ├── customer_insights.py    # RFM scoring and segmentation
 │   │   ├── strategic_intelligence.py # Executive narratives
 │   │   ├── powerbi_export.py       # PowerBI integration
-│   │   ├── processor.py            # Orders dataframe processing
 │   │   └── woocommerce_client/      # Advanced WooCommerce API clients
 │   │       ├── api_client.py       # Base client with retry logic
 │   │       ├── fetch_orders.py     # Order fetching logic
 │   │       └── fetch_customers.py  # Customer profile fetching
 │   │
 │   ├── commerce_ops/               # Operational tools
-│   │   ├── pathao_tab.py           # Pathao shipping integration
-│   │   ├── fuzzy_parser_tab.py     # Unstructured data parsing
+│   │   ├── distribution_tab.py     # Inventory distribution logic
+│   │   ├── persistence.py          # UI State persistence manager
 │   │   └── ui_components.py        # Shared operational UI
 │   │
 │   └── cache/                      # Local data cache
@@ -411,6 +410,11 @@ pytest tests/ -v
 ---
 
 ## 10. Recent Changes (Agent Context)
+
+### 2026-04-24: Deprecated Operations Cleanup
+- **Removed Legacy Logistics Integrations**: Completely deleted `pathao_tab.py`, `processor.py`, and `wp_processor.py`.
+- **Removed Text Parsers**: Deleted `wp_tab.py` and `fuzzy_parser_tab.py` to reduce technical debt and simplify the operations module.
+- **Purged Dead States**: Cleaned up the session state manager to prevent holding memory for obsolete dataframes.
 
 ### 2026-04-23: Global UI/UX Overhaul & Stability Matrix
 - **Premium UI Framework**: Injected global CSS for glassmorphism, hover-lift animations, and standardized inputs (`st.selectbox`, `st.dataframe`, download buttons).
