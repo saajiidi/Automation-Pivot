@@ -435,13 +435,13 @@ def render_intelligence_hub_page():
 
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     with c1:
-        ui.icon_metric("Total Items Sold", format_compact(total_items), icon="📦", delta=d_items_label, delta_val=d_items_val)
+        ui.icon_metric("Items Sold", format_compact(total_items), icon="📦", delta=d_items_label, delta_val=d_items_val)
     with c2:
         ui.icon_metric("Revenue", f"৳{format_compact(total_rev)}", icon="💰", delta=d_rev_label, delta_val=d_rev_val)
     with c3:
         ui.icon_metric("Orders", format_compact(order_count), icon="🛒", delta=d_orders_label, delta_val=d_orders_val)
     with c4:
-        ui.icon_metric("Avg. Orders / Day", format_compact(avg_orders_per_day), icon="📅", delta=d_avg_label, delta_val=d_avg_val)
+        ui.icon_metric("Avg. Orders", format_compact(avg_orders_per_day), icon="📅", delta=d_avg_label, delta_val=d_avg_val)
     with c5:
         ui.icon_metric("Customers", format_compact(cust_count), icon="👥", delta=d_cust_label, delta_val=d_cust_val)
     with c6:
