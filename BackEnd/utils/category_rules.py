@@ -1,33 +1,53 @@
 import pandas as pd
 
 CATEGORY_MAPPING = {
-    'Boxer': ['boxer'],
+    # --- T-Shirts ---
     'T-Shirt - Tank Top': ['tank top', 'tanktop', 'tank', 'top'],
-    'Jeans': ['jeans'],
+    'T-Shirt - Drop Shoulder': ['drop shoulder'],
+    'T-Shirt - Active Wear': ['active wear', 'activewear'],
+    'T-Shirt - Jersey': ['jersy', 'jersey'],
+    'T-Shirt - FS T-Shirt': ['full sleeve', 'long sleeve', 'fs', 'l/s'],
+    'T-Shirt - HS T-Shirt': ['half sleeve', 'hs'],
+
+    # --- Shirts & Polos ---
     'FS Shirt - Denim Shirt': ['denim'],
     'FS Shirt - Flannel Shirt': ['flannel'],
     'FS Shirt - Oxford Shirt': ['oxford'],
     'FS Shirt - Executive Formal Shirt': ['executive', 'formal'],
+    'FS Shirt - Kaftan Shirt': ['kaftan'],
+    'HS Shirt - Contrast Shirt': ['contrast'],
     'Polo Shirt': ['polo'],
-    'Panjabi': ['panjabi', 'punjabi'],
+
+    # --- Bottoms ---
+    'Jeans': ['jeans'],
     'Trousers': ['trousers', 'pant', 'cargo', 'trouser', 'joggers', 'track pant', 'jogger'],
     'Twill Chino': ['twill chino'],
-    'Mask': ['mask'],
-    'Water Bottle': ['water bottle'],
-    'HS Shirt - Contrast Shirt': ['contrast'],
-    'Turtleneck': ['turtleneck', 'mock neck'],
-    'T-Shirt - Drop Shoulder': ['drop shoulder'],
-    'Wallet': ['wallet'],
-    'FS Shirt - Kaftan Shirt': ['kaftan'],
-    'T-Shirt - Active Wear': ['active wear', 'activewear'],
-    'T-Shirt - Jersey': ['jersy', 'jersey'],
+
+    # --- Outerwear & Winter ---
     'Sweatshirt': ['sweatshirt', 'hoodie', 'pullover'],
     'Jacket': ['jacket', 'outerwear', 'coat'],
-    'Belt': ['belt'],
     'Sweater': ['sweater', 'cardigan', 'knitwear'],
+    'Turtleneck': ['turtleneck', 'mock neck'],
+
+    # --- Ethnic ---
+    'Panjabi': ['panjabi', 'punjabi'],
+
+    # --- Innerwear ---
+    'Boxer': ['boxer'],
+
+    # --- Accessories ---
+    'Wallet': ['wallet'],
     'Passport Holder': ['passport holder'],
+    'Belt': ['belt'],
     'Cap': ['cap'],
+    'Mask': ['mask'],
+    'Water Bottle': ['water bottle'],
     'Leather Bag': ['bag', 'backpack'],
+
+    # --- Bundles ---
+    'Bundles - Choose Any': ['choose any'],
+    'Bundles - Combo': ['combo', 'cambo'],
+    'Bundles': ['bundle'],
 }
 
 def get_product_category(name: str) -> str:

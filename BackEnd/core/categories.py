@@ -27,7 +27,7 @@ CATEGORIES_PRIORITY = [
     "Polo Shirt", "Turtle-Neck",
     "Twill", "Twill - Twill Chino", "Twill - Twill Joggers", "Twill - Five Pockets",
     "Trousers", "Trousers - Trousers", "Trousers - Joggers", "Trousers - Cotton Trousers", "Trousers - French Terry Trousers",
-    "Boxer", "Leather Bag", "Belt", "Jacket", "Sweater", "Cap", "Mask", "Water Bottle", "Bundles", "Others"
+    "Boxer", "Leather Bag", "Belt", "Jacket", "Sweater", "Cap", "Mask", "Water Bottle", "Bundles", "Bundles - Combo", "Bundles - Choose Any", "Others"
 ]
 
 def format_category_label(cat: str) -> str:
@@ -175,12 +175,16 @@ def get_category_for_sales(name) -> str:
         return "Trousers - Trousers"
 
     # 3. STATIC / BUNDLES
-    if "bundle" in name_str:
+    if _has_any(["bundle", "combo", "cambo", "choose any"], name_str):
         detected = []
         if _has_any(["t-shirt", "t shirt", "tee"], name_str): detected.append("T-Shirt")
         if _has_any(["jeans", "denim"], name_str): detected.append("Jeans")
         if _has_any(["boxer"], name_str): detected.append("Boxer")
-        return f"Bundles - {' + '.join(detected)}" if detected else "Bundles"
+        if detected:
+            return f"Bundles - {' + '.join(detected)}"
+        if _has_any(["choose any"], name_str): return "Bundles - Choose Any"
+        if _has_any(["combo", "cambo"], name_str): return "Bundles - Combo"
+        return "Bundles"
 
     specific_cats = {
         "Boxer": ["boxer"],
