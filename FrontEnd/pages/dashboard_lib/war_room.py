@@ -6,6 +6,7 @@ from BackEnd.services.strategic_intelligence import (
     calculate_rfm_churn_risk
 )
 from BackEnd.commerce_ops.ui_components import anomaly_alert_card
+from BackEnd.commerce_ops.persistence import KeyManager
 
 def render_war_room_page(sales_df: pd.DataFrame, returns_df: pd.DataFrame):
     """Business Intelligence War-Room for pro-active anomaly detection and strategy."""
@@ -39,9 +40,9 @@ def render_war_room_page(sales_df: pd.DataFrame, returns_df: pd.DataFrame):
     
     with col1:
         st.markdown("### 🎚️ Adjusted Settings")
-        rev_growth = st.slider("Monthly Revenue Growth (%)", -20, 50, 0)
-        ret_reduction = st.slider("Return Rate Reduction (%)", 0, 80, 0)
-        partial_conversion = st.slider("Partial -> Full Order Conversion (%)", 0, 50, 0)
+        rev_growth = st.slider("Monthly Revenue Growth (%)", -20, 50, 0, key=KeyManager.get_key("war_room", "rev_growth"))
+        ret_reduction = st.slider("Return Rate Reduction (%)", 0, 80, 0, key=KeyManager.get_key("war_room", "ret_reduction"))
+        partial_conversion = st.slider("Partial -> Full Order Conversion (%)", 0, 50, 0, key=KeyManager.get_key("war_room", "partial_conv"))
         
     with col2:
         # Base metrics (Mocked or calculated from current window)
@@ -108,7 +109,8 @@ def render_war_room_page(sales_df: pd.DataFrame, returns_df: pd.DataFrame):
                 csv,
                 "high_risk_vips.csv",
                 "text/csv",
-                width="stretch"
+                width="stretch",
+                key=KeyManager.get_key("war_room", "dl_vips")
             )
         with c2:
-            st.button("🔔 Send Retention Notification (Mock)", width="stretch", disabled=True)
+            st.button("🔔 Send Retention Notification (Mock)", width="stretch", disabled=True, key=KeyManager.get_key("war_room", "notify_vips"))

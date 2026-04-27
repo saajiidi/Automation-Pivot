@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 from .data_helpers import sum_order_level_revenue, build_order_level_dataset
+from BackEnd.commerce_ops.persistence import KeyManager
 
 def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, ml_bundle: dict, time_window: str = "this period", df_prev_sales: pd.DataFrame = None, return_raw: bool = False):
     if df_sales.empty:
@@ -178,11 +179,11 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
             
             with ic2:
                 if not at_risk_vips.empty:
-                    if st.button("👥", key="btn_vip_churn", help="View At-Risk VIPs"):
-                        st.session_state.show_vip_churn = not st.session_state.get("show_vip_churn", False)
+                    if st.button("👥", key=KeyManager.get_key("story", "vip_churn_btn"), help="View At-Risk VIPs"):
+                        st.session_state[KeyManager.get_key("story", "show_vip_churn")] = not st.session_state.get(KeyManager.get_key("story", "show_vip_churn"), False)
 
             # VIP Churn Rescue View
-            if st.session_state.get("show_vip_churn") and not at_risk_vips.empty:
+            if st.session_state.get(KeyManager.get_key("story", "show_vip_churn")) and not at_risk_vips.empty:
                 st.markdown("---")
                 st.warning(f"🚨 At-Risk VIPs: These customers are high-value but haven't interacted in 21+ days.")
                 st.dataframe(at_risk_vips[["primary_name", "total_revenue", "total_orders", "recency_days"]].rename(

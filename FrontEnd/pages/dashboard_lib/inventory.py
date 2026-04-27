@@ -14,7 +14,7 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
     with c1:
         st.subheader("📦 Stock Insight")
     with c2:
-        if st.button("🔄 Sync Products & Stock", use_container_width=True, help="Fetch latest published products, SKUs, and inventory counts."):
+        if st.button("🔄 Sync Products & Stock", use_container_width=True, key=KeyManager.get_key("inventory", "sync_btn"), help="Fetch latest published products, SKUs, and inventory counts."):
             with st.spinner("Fetching latest product catalog and stock data..."):
                 from BackEnd.services.hybrid_data_loader import refresh_woocommerce_stock_cache
                 
@@ -104,7 +104,9 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
     with m2: ui.icon_metric("Low Stock Alerts", format_val(len(low_stock)), icon="⚠️")
     with m3: ui.icon_metric("Inventory Asset Value", format_curr(inventory['Value'].sum()), icon="💰")
     
-    st.toggle("Show Exact Values", key=KeyManager.get_key("inventory", "show_exact"))
+    t_col1, t_col2 = st.columns([8, 2])
+    with t_col2:
+        st.toggle("Show Exact Values", key=KeyManager.get_key("inventory", "show_exact"))
 
     st.divider()
 
@@ -186,7 +188,8 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
             "Aggregation Level",
             ["Main Category", "Sub-Category", "Master Product", "Variant"],
             index=1,
-            horizontal=True
+            horizontal=True,
+            key=KeyManager.get_key("inventory", "group_basis")
         )
         
         val_basis = "Market Value"
