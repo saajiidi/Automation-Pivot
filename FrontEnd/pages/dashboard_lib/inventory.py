@@ -80,13 +80,34 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
     # Vectorized Trend Classification
     inventory["Trend"] = classify_velocity_trend(inventory["daily_velocity"])
 
+    show_exact = st.session_state.get("global_show_exact", False)
+
+    def format_val(num):
+        if show_exact: return f"{num:,}"
+        if num >= 1_000_000: return f"{num/1_000_000:.1f}M".replace(".0M", "M")
+        if num >= 1_000: return f"{num/1_000:.1f}K".replace(".0K", "K")
+        return f"{num:,}"
+        
+    def format_curr(num):
+        if show_exact: return f"৳{num:,.0f}"
+        if num >= 1_000_000: return f"৳{num/1_000_000:.1f}M".replace(".0M", "M")
+        if num >= 1_000: return f"৳{num/1_000:.1f}K".replace(".0K", "K")
+        return f"৳{num:,.0f}"
+
     # Summary Metrics
     low_stock = inventory[inventory["Stock Quantity"] <= 5]
     m1, m2, m3 = st.columns(3)
     with m1: ui.icon_metric("Unique SKU Records", f"{len(inventory):,}", icon="🏷️")
     with m2: ui.icon_metric("Low Stock Alerts", f"{len(low_stock):,}", icon="⚠️")
     with m3: ui.icon_metric("Inventory Asset Value", f"৳{inventory['Value'].sum():,.0f}", icon="💰")
+    with m1: ui.icon_metric("Unique SKU Records", format_val(len(inventory)), icon="🏷️")
+    with m2: ui.icon_metric("Low Stock Alerts", format_val(len(low_stock)), icon="⚠️")
+    with m3: ui.icon_metric("Inventory Asset Value", format_curr(inventory['Value'].sum()), icon="💰")
     
+    t_col1, t_col2 = st.columns([8, 2])
+    with t_col2:
+        st.toggle("Show Exact Values", key="global_show_exact")
+
     st.divider()
 
     # 2. Inventory Sniper (Structured Search)
