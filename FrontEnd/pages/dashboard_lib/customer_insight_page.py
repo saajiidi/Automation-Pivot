@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 # Use EXISTING working API components
 from FrontEnd.components.customer_insight.customer_filters import (
@@ -52,31 +53,31 @@ def _render_metric_cards(metrics: Dict[str, Any]) -> None:
     
     with cols[0]:
         ui.metric_highlight(
-            label="Total Customers",
-            value=f"{metrics['total_customers']:,}",
-            help_text="Lifetime Base",
+            label="Total Base (Est.)",
+            value=f"{metrics.get('est_total_customers', 0):,}",
+            help_text="Lifetime Customers",
             icon="👥"
         )
     with cols[1]:
         ui.metric_highlight(
-            label="New Customers",
-            value=f"{metrics['new_customers']:,}",
-            help_text="Acquired in Range",
-            icon="✨"
+            label="Total Registered ✨",
+            value=f"{metrics.get('total_registered', 0):,}",
+            help_text="Exact Account Holders",
+            icon="🏆"
         )
     with cols[2]:
         ui.metric_highlight(
-            label="Active Customers",
-            value=f"{metrics['active_customers']:,}",
-            help_text="Orders in Range",
-            icon="🔥"
+            label="Guest Shoppers",
+            value=f"{metrics.get('est_total_guests', 0):,}",
+            help_text="Lifetime Base (Est.)",
+            icon="🚶"
         )
     with cols[3]:
         ui.metric_highlight(
-            label="Return Impact",
-            value=f"{metrics['return_count']:,}",
-            help_text="Returned Orders",
-            icon="🔄"
+            label="Active in Period",
+            value=f"{metrics.get('active_customers', 0):,}",
+            help_text=f"Reg: {metrics.get('registered_active', 0):,} | Guest: {metrics.get('guest_active', 0):,}",
+            icon="🔥"
         )
 
 def render_customer_insight_page() -> None:
@@ -111,7 +112,22 @@ def render_customer_insight_page() -> None:
 
 def _render_analysis_tab() -> None:
     """Existing analysis logic."""
-    # HORIZONTAL LAYOUT: Full width filters on top, results below
+    if "dashboard_data" not in st.session_state:
+        st.info("📊 Please sync data to use customer filters.")
+        return
+        
+    sales_df = app_state.sales_active
+    if sales_df.empty:
+        st.info("📭 No sales data available. Please sync data first.")
+        return
+
+    # 1. Global Insights (Metrics & Charts) BEFORE filters
+    _render_global_insights(sales_df)
+    
+    st.markdown("### 🔍 Filter & Analyze Customers")
+    st.caption("Find specific customers by purchase history, spending, and accounts")
+
+    # 2. HORIZONTAL LAYOUT: Full width filters on top, results below
     col_f, col_s = st.columns([3, 1])
     with col_f:
         filters = render_customer_filters(
@@ -122,8 +138,8 @@ def _render_analysis_tab() -> None:
     with col_s:
         _render_mapping_updater_fragment()
 
-    # Results section below filters
-    _render_main_content(filters)
+    # 3. Results section below filters
+    _render_filtered_results(sales_df, filters)
 
 
 @st.fragment
@@ -256,23 +272,12 @@ def _get_global_date_range() -> tuple[date, date]:
     if hasattr(end_dt, "date"): end_dt = end_dt.date()
     return start_dt, end_dt
 
-def _render_main_content(filters: Dict[str, Any]) -> None:
-    """Render the main content area using existing working API.
+def _render_global_insights(sales_df: pd.DataFrame) -> None:
+    """Render the global insights metrics and charts.
     
     Args:
-        filters: Current filter settings
+        sales_df: Current active sales dataframe
     """
-    # Use existing working data from session state
-    if "dashboard_data" not in st.session_state:
-        st.info("📊 Please sync data to use customer filters.")
-        return
-    
-    sales_df = app_state.sales_active
-    
-    if sales_df.empty:
-        st.info("📭 No sales data available. Please sync data first.")
-        return
-    
     # Get contextual date range from global operational bounds
     start_date, end_date = _get_global_date_range()
 
@@ -283,6 +288,48 @@ def _render_main_content(filters: Dict[str, Any]) -> None:
     all_active_sales = sales_df.copy()
     active_count = all_active_sales["customer_key"].nunique() if not all_active_sales.empty else 0
     
+    # Calculate Registered vs Guest active customers
+    if "customer_key" in all_active_sales.columns:
+        reg_mask = all_active_sales["customer_key"].astype(str).str.startswith("reg_")
+        registered_active = all_active_sales[reg_mask]["customer_key"].nunique()
+        guest_active = active_count - registered_active
+    else:
+        registered_active = 0
+        guest_active = 0
+
+    # Advanced Time-Weighted (EMA) Guest Estimation
+    dashboard_data = st.session_state.get("dashboard_data", {})
+    total_registered = dashboard_data.get("customer_count", 0)
+    full_sales_df = dashboard_data.get("sales", pd.DataFrame())
+    
+    if not full_sales_df.empty and "customer_key" in full_sales_df.columns and "order_date" in full_sales_df.columns:
+        # 1. Extract daily unique guest vs registered cohorts
+        trend_df = full_sales_df[["order_date", "customer_key"]].copy()
+        trend_df["is_reg"] = trend_df["customer_key"].astype(str).str.startswith("reg_")
+        trend_df["date"] = pd.to_datetime(trend_df["order_date"]).dt.date
+        
+        daily_cohorts = trend_df.groupby(["date", "is_reg"])["customer_key"].nunique().unstack(fill_value=0)
+        
+        if True in daily_cohorts.columns and False in daily_cohorts.columns:
+            # 2. Calculate daily ratio with protection against division by zero
+            daily_cohorts["ratio"] = daily_cohorts[False] / daily_cohorts[True].replace(0, 1)
+            
+            # 3. Apply Time-Series Exponential Moving Average (30-day span) 
+            # This weighs recent behavioral trends exponentially higher than historical ones
+            ema_ratio = daily_cohorts["ratio"].ewm(span=30, adjust=False).mean().iloc[-1]
+            base_ratio = float(ema_ratio)
+        else:
+            base_ratio = guest_active / max(registered_active, 1)
+    else:
+        base_ratio = guest_active / max(registered_active, 1) if registered_active > 0 else 1.2
+        
+    # 4. Apply Logarithmic Maturity Decay (adjusts the estimate slightly downwards as the core base scales)
+    maturity_factor = np.log10(max(total_registered, 10)) / 5.0 if total_registered > 1000 else 1.0
+    adjusted_ratio = base_ratio * max(0.7, (1.1 - (maturity_factor * 0.15)))
+    
+    est_total_guests = int(total_registered * adjusted_ratio)
+    est_total_customers = total_registered + est_total_guests
+
     # Calculate Returns count
     return_count = 0
     if "returns_data" in st.session_state:
@@ -295,18 +342,96 @@ def _render_main_content(filters: Dict[str, Any]) -> None:
     # Render Modern Cards
     _render_metric_cards({
         "total_customers": mapping_metrics['total_customers'],
-        "new_customers": mapping_metrics['new_customers'],
         "active_customers": active_count,
+        "est_total_customers": est_total_customers,
+        "total_registered": total_registered,
+        "est_total_guests": est_total_guests,
+        "registered_active": registered_active,
+        "guest_active": guest_active,
         "return_count": return_count
     })
     
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # Render EMA Trend Chart for Guest vs Registered
+    if 'daily_cohorts' in locals() and not daily_cohorts.empty and True in daily_cohorts.columns and False in daily_cohorts.columns:
+        import plotly.express as px
+        
+        st.markdown("#### 📈 Account Registration Trend (EMA Smoothed)")
+        st.caption("Tracking the 14-day exponential moving average of Guest vs Registered activity.")
+        
+        plot_df = daily_cohorts.copy().reset_index()
+        plot_df["Registered Users"] = plot_df[True].ewm(span=14, adjust=False).mean()
+        plot_df["Guest Shoppers"] = plot_df[False].ewm(span=14, adjust=False).mean()
+        
+        melted_df = plot_df.melt(
+            id_vars=["date"], 
+            value_vars=["Registered Users", "Guest Shoppers"],
+            var_name="Account Type",
+            value_name="Daily Active (Smoothed)"
+        )
+        
+        fig = px.area(
+            melted_df, 
+            x="date", 
+            y="Daily Active (Smoothed)", 
+            color="Account Type",
+            color_discrete_map={
+                "Registered Users": "rgba(16, 185, 129, 0.7)", # Emerald
+                "Guest Shoppers": "rgba(99, 102, 241, 0.5)"    # Indigo
+            },
+            line_shape="spline"
+        )
+        
+        fig.update_layout(
+            height=280,
+            margin=dict(l=0, r=0, t=10, b=0),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            xaxis_title="",
+            yaxis_title="Activity Volume",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("---")
+
+
+def _render_filtered_results(sales_df: pd.DataFrame, filters: Dict[str, Any]) -> None:
+    """Render the filtered customer results and metrics.
+    
+    Args:
+        sales_df: Current active sales dataframe
+        filters: Filter settings
+    """
     # Apply filters to existing data
     with st.spinner("🔍 Filtering customers..."):
         # Generate customer insights from sales data
         customers_df = _get_filtered_customers_from_sales(sales_df, filters)
     
+    # Inject Account Type and Loyalty Scoring
+    if not customers_df.empty:
+        if "customer_key" in customers_df.columns:
+            customers_df["account_type"] = np.where(
+                customers_df["customer_key"].astype(str).str.startswith("reg_"), 
+                "Registered", 
+                "Guest"
+            )
+            
+        # Loyalty Score Calculation based on Recency/Frequency/Monetary Proxies
+        if "total_orders" in customers_df.columns and ("total_revenue" in customers_df.columns or "total_value" in customers_df.columns):
+            rev_col = "total_revenue" if "total_revenue" in customers_df.columns else "total_value"
+            o_score = (customers_df["total_orders"] / 10.0).clip(upper=1.0) * 50
+            r_score = (customers_df[rev_col] / 20000.0).clip(upper=1.0) * 50
+            customers_df["loyalty_score"] = (o_score + r_score).round(0)
+            
+            conditions = [
+                customers_df["loyalty_score"] >= 80,
+                customers_df["loyalty_score"] >= 50,
+                customers_df["loyalty_score"] >= 20
+            ]
+            choices = ["Platinum 🏆", "Gold 🌟", "Silver ⭐"]
+            customers_df["loyalty_tier"] = np.select(conditions, choices, default="Bronze 🥉")
+
     # Show results summary or early return
     if customers_df.empty:
         st.warning("📭 No customers match your specific filters. Try adjusting your search.")
@@ -317,16 +442,20 @@ def _render_main_content(filters: Dict[str, Any]) -> None:
     st.caption("Detailed metrics for the customers matching your current search criteria.")
     
     # Additional insight stats (Revenue/AOV)
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         total_orders = customers_df["total_orders"].sum() if "total_orders" in customers_df.columns else 0
         ui.icon_metric("Total Orders (Filtered)", f"{int(total_orders):,}", icon="🛒")
     with col2:
-        total_revenue = customers_df["total_revenue"].sum() if "total_revenue" in customers_df.columns else customers_df.get("total_value", pd.Series([0])).sum()
-        ui.icon_metric("Total Revenue (Filtered)", f"৳{total_revenue:,.0f}", icon="💰")
+        total_rev = customers_df["total_revenue"].sum() if "total_revenue" in customers_df.columns else customers_df.get("total_value", pd.Series([0])).sum()
+        ui.icon_metric("Total Revenue (Filtered)", f"৳{total_rev:,.0f}", icon="💰")
     with col3:
         avg_aov = customers_df["avg_order_value"].mean() if "avg_order_value" in customers_df.columns else 0
         ui.icon_metric("Avg AOV (Filtered)", f"৳{avg_aov:,.0f}", icon="💳")
+    with col4:
+        if "loyalty_tier" in customers_df.columns:
+            plat_count = (customers_df["loyalty_tier"] == "Platinum 🏆").sum()
+            ui.icon_metric("Platinum Loyalty", f"{plat_count:,}", icon="👑")
     
     # Export button
     export_col1, export_col2 = st.columns([1, 3])
@@ -336,6 +465,7 @@ def _render_main_content(filters: Dict[str, Any]) -> None:
         # Select relevant columns for export
         export_columns = [
             "customer_id", "customer_key", "primary_name", "name", "all_emails", "all_phones",
+            "account_type", "loyalty_tier", "loyalty_score",
             "total_orders", "total_revenue", "total_value", "avg_order_value", 
             "first_order", "last_order", "segment"
         ]
@@ -456,6 +586,9 @@ def render_enhanced_customer_insight_tab(
         total_accounts: Not displayed
         df_sales: Sales DataFrame
     """
+    # 1. Render Global Insights (Metrics & EMA Chart) BEFORE filters
+    _render_global_insights(df_sales)
+
     # Single header, no redundancy
     st.markdown("### 🔍 Filter & Analyze Customers")
     st.caption("Find customers by products purchased, order count, and spending")
@@ -555,6 +688,29 @@ def _render_compact_results(filters: Dict[str, Any]) -> None:
     with st.spinner("Filtering customers..."):
         customers_df = _get_filtered_customers_from_sales(sales_df, filters)
     
+    # Inject Account Type and Loyalty Scoring for Compact View too
+    if not customers_df.empty:
+        if "customer_key" in customers_df.columns:
+            customers_df["account_type"] = np.where(
+                customers_df["customer_key"].astype(str).str.startswith("reg_"), 
+                "Registered", 
+                "Guest"
+            )
+            
+        if "total_orders" in customers_df.columns and ("total_revenue" in customers_df.columns or "total_value" in customers_df.columns):
+            rev_col = "total_revenue" if "total_revenue" in customers_df.columns else "total_value"
+            o_score = (customers_df["total_orders"] / 10.0).clip(upper=1.0) * 50
+            r_score = (customers_df[rev_col] / 20000.0).clip(upper=1.0) * 50
+            customers_df["loyalty_score"] = (o_score + r_score).round(0)
+            
+            conditions = [
+                customers_df["loyalty_score"] >= 80,
+                customers_df["loyalty_score"] >= 50,
+                customers_df["loyalty_score"] >= 20
+            ]
+            choices = ["Platinum 🏆", "Gold 🌟", "Silver ⭐"]
+            customers_df["loyalty_tier"] = np.select(conditions, choices, default="Bronze 🥉")
+
     if customers_df.empty:
         st.warning("No customers match these filters")
         return
@@ -579,6 +735,7 @@ def _render_compact_results(filters: Dict[str, Any]) -> None:
         export_df = customers_df.copy()
         export_columns = [
             "customer_id", "customer_key", "primary_name", "name", "all_emails", "all_phones",
+            "account_type", "loyalty_tier", "loyalty_score",
             "total_orders", "total_revenue", "total_value", "avg_order_value",
             "first_order", "last_order", "segment"
         ]

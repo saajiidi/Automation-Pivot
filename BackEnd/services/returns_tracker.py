@@ -389,10 +389,10 @@ def load_returns_data(
     if cached_df.empty:
         merged_df = processed_new
     else:
-        # Concatenate and remove duplicates based on order_id and date
+        # Concatenate and remove duplicates based on order_id_raw and date
         merged_df = pd.concat([cached_df, processed_new], ignore_index=True)
-        if "order_id" in merged_df.columns and "date" in merged_df.columns:
-            merged_df = merged_df.drop_duplicates(subset=["order_id", "date"], keep="last")
+        if "order_id_raw" in merged_df.columns and "date" in merged_df.columns:
+            merged_df = merged_df.drop_duplicates(subset=["order_id_raw", "date"], keep="last")
         merged_df = merged_df.sort_values("date", ascending=False).reset_index(drop=True)
         logger.info(f"Merged data: {len(cached_df)} cached + {len(processed_new)} new = {len(merged_df)} total")
 
@@ -1468,7 +1468,15 @@ def calculate_net_sales_metrics(
     gross_sales = float(pd.to_numeric(sales_context.get("_line_revenue", 0.0), errors="coerce").fillna(0.0).sum()) if not sales_context.empty else 0.0
     total_orders = int(sales_context["order_id"].nunique()) if not sales_context.empty else 0
     # Ensure total_items_sold is a scalar (defensive against Series/array input)
-    total_items_sold = int(total_items_sold) if hasattr(total_items_sold, '__int__') else 0
+    try:
+        if hasattr(total_items_sold, "iloc"):
+            total_items_sold = int(total_items_sold.iloc[0])
+        elif hasattr(total_items_sold, "__iter__") and not isinstance(total_items_sold, (str, dict)):
+            total_items_sold = int(list(total_items_sold)[0])
+        else:
+            total_items_sold = int(total_items_sold)
+    except (ValueError, TypeError, IndexError):
+        total_items_sold = 0
 
     if returns_df.empty:
         return {
@@ -1496,8 +1504,12 @@ def calculate_net_sales_metrics(
             "total_items_sold": total_items_sold,
         }
 
-    # Deduplicate by normalized order_id for counting unique orders
-    unique_orders = returns_df.drop_duplicates(subset=["order_id"]).copy()
+    # Deduplicate by raw order ID to support multiple returns per WooCommerce order (e.g. branch dispatches 196490 vs 196490w)
+    # We use order_id_raw to ensure we don't drop distinct returns that normalize to the same order number
+    if "order_id_raw" in returns_df.columns:
+        unique_orders = returns_df.drop_duplicates(subset=["order_id_raw", "date"]).copy()
+    else:
+        unique_orders = returns_df.drop_duplicates(subset=["order_id", "date"]).copy()
     unique_orders["_resolved_revenue_impact"] = 0.0
     unique_orders["_impact_source"] = "unattributed"
     unique_orders["_matched_item_qty"] = 0
@@ -1625,7 +1637,16 @@ def calculate_net_sales_metrics(
 
     # ── Returned Orders Percentage ──
     # Ensure total_orders is a scalar to avoid ambiguous truth value error
-    total_orders_scalar = int(total_orders) if hasattr(total_orders, '__int__') else total_orders
+    try:
+        if hasattr(total_orders, "iloc"):
+            total_orders_scalar = int(total_orders.iloc[0])
+        elif hasattr(total_orders, "__iter__") and not isinstance(total_orders, (str, dict)):
+            total_orders_scalar = int(list(total_orders)[0])
+        else:
+            total_orders_scalar = int(total_orders)
+    except (ValueError, TypeError, IndexError):
+        total_orders_scalar = int(total_orders) if hasattr(total_orders, '__int__') else 0
+        
     returned_orders_pct = (return_count / total_orders_scalar * 100) if total_orders_scalar > 0 else 0.0
 
     # ── Calculate Revenue Impact from Cross-Referenced Items ──
@@ -1714,7 +1735,7 @@ def calculate_net_sales_metrics(
     }
 
     # ── Return rate ──
-    if total_orders_scalar and total_orders_scalar > 0:
+    if total_orders_scalar > 0:
         metrics["return_rate"] = round(
             (return_count + partial_count + exchange_count) / total_orders_scalar * 100, 2
         )

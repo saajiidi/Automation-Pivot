@@ -193,6 +193,22 @@ class WooCommerceService:
             
             total_amount = order.get("total")
             payment_method = order.get("payment_method_title")
+            
+            customer_id = order.get("customer_id", 0)
+            is_registered = bool(customer_id > 0)
+            
+            raw_email = billing.get("email", "").strip()
+            if is_registered:
+                customer_key = f"reg_{customer_id}"
+            elif raw_email:
+                customer_key = f"guest_{raw_email}"
+            elif phone.strip():
+                customer_key = f"guest_phone_{phone.strip()}"
+            else:
+                customer_key = f"guest_anon_{order_id}"
+                
+            email = raw_email if raw_email else f"guest_{order_id}@unknown.com"
+            
             shipped_date = order.get("date_modified")
             if shipped_date:
                 try:
@@ -223,6 +239,10 @@ class WooCommerceService:
                     "year": year,
                     "Customer Name": full_name,
                     "Phone (Billing)": phone,
+                    "email": email,
+                    "customer_id": customer_id,
+                    "is_registered": is_registered,
+                    "customer_key": customer_key,
                     "Address 1&2 (Billing)": address,
                     "City, State, Zip (Billing)": city_state_zip,
                     "Order Total Amount": total_amount,

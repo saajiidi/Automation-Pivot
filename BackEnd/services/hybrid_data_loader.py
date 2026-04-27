@@ -698,6 +698,10 @@ def _generate_demo_sales(start_date=None, end_date=None) -> pd.DataFrame:
     
     item_indices = np.random.randint(0, len(items), size=num_orders)
     
+    is_reg = np.random.choice([True, False], size=num_orders, p=[0.6, 0.4])
+    demo_ids = np.random.randint(1, 100, size=num_orders)
+    customer_keys = [f"reg_{i}" if r else f"guest_demo{i}@example.com" for r, i in zip(is_reg, demo_ids)]
+    
     df = pd.DataFrame({
         "order_id": np.random.randint(100000, 999999, size=num_orders).astype(str),
         "order_date": dates,
@@ -708,14 +712,17 @@ def _generate_demo_sales(start_date=None, end_date=None) -> pd.DataFrame:
             ["completed", "processing", "on-hold", "refunded", "cancelled"], 
             num_orders, p=[0.75, 0.10, 0.05, 0.05, 0.05]
         ),
-        "customer_key": ["reg_" + str(i) for i in np.random.randint(1, 100, size=num_orders)],
+        "customer_key": customer_keys,
         "city": np.random.choice(["Dhaka", "Chittagong", "Sylhet", "Rajshahi", "Khulna"], num_orders),
         "state": np.random.choice(["Dhaka", "Chittagong", "Sylhet", "Rajshahi", "Khulna"], num_orders),
         "Category": [cats[i] for i in item_indices],
         "customer_name": ["Demo Customer " + str(i) for i in np.random.randint(1, 100, size=num_orders)],
         "phone": ["01711" + str(np.random.randint(100000, 999999)) for _ in range(num_orders)],
-        "email": ["demo" + str(i) + "@example.com" for i in np.random.randint(1, 100, size=num_orders)],
+        "email": [f"demo{i}@example.com" for i in demo_ids],
     })
+    
+    df["customer_id"] = [i if r else 0 for r, i in zip(is_reg, demo_ids)]
+    df["is_registered"] = is_reg
     
     df["price"] = [prices[i] for i in item_indices]
     df["item_revenue"] = df["qty"] * df["price"]
