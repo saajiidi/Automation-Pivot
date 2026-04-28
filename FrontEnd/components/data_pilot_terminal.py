@@ -180,9 +180,9 @@ def render_advanced_sql_terminal(sales_df: pd.DataFrame = None, returns_df: pd.D
             tab_data, tab_viz = st.tabs(["📋 Data Table", "📊 Visualizer"])
             
             with tab_data:
-                st.dataframe(result_df, use_container_width=True)
+                st.dataframe(result_df, use_container_width=True, key=KeyManager.get_key("pilot", "sql_result_df"))
                 
-                btn_c1, btn_c2 = st.columns(2)
+                btn_c1, btn_c2, btn_c3 = st.columns(3) # Added a third column for the "Explain Result" button
                 with btn_c1:
                     excel_bytes = export_to_excel(result_df, sheet_name="SQL Extract")
                     st.download_button(
@@ -196,6 +196,11 @@ def render_advanced_sql_terminal(sales_df: pd.DataFrame = None, returns_df: pd.D
                 with btn_c2:
                     if st.button("🧠 Explain Result", use_container_width=True, key=KeyManager.get_key("pilot", "explain_btn")):
                         st.session_state[KeyManager.get_key("pilot", "chat_explain_request")] = True
+                        st.rerun()
+                with btn_c3:
+                    # New button to copy Plotly code
+                    if st.button("📈 Get Plotly Code", use_container_width=True, key=KeyManager.get_key("pilot", "plotly_code_btn")):
+                        st.session_state[KeyManager.get_key("pilot", "chat_plotly_request")] = True
                         st.rerun()
                 
             with tab_viz:
@@ -250,19 +255,26 @@ def render_advanced_sql_terminal(sales_df: pd.DataFrame = None, returns_df: pd.D
             st.markdown(msg["content"])
             
     # Chat input
-    prompt = None
+    prompt_user_input = st.chat_input("Ask a question about your data or request a SQL query...")
+    
+    # Handle explain request
     if st.session_state.get(KeyManager.get_key("pilot", "chat_explain_request"), False):
-        prompt = "Please act as a data analyst. I just ran a SQL query. Explain the key insights and trends visible in the resulting data table you have in context."
         st.session_state[KeyManager.get_key("pilot", "chat_explain_request")] = False
+        chat_prompt = "Please act as a data analyst. I just ran a SQL query. Explain the key insights and trends visible in the resulting data table you have in context."
         # Need to spoof the chat input appearance in history
         st.session_state.pilot_chat_messages.append({"role": "user", "content": "🧠 *Requested Data Explanation*"})
         with st.chat_message("user"): st.markdown("🧠 *Requested Data Explanation*")
-    elif user_input := st.chat_input("Ask a question about your data or request a SQL query..."):
-        prompt = user_input
-        st.session_state.pilot_chat_messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"): st.markdown(prompt)
+    elif st.session_state.get(KeyManager.get_key("pilot", "chat_plotly_request"), False):
+        st.session_state[KeyManager.get_key("pilot", "chat_plotly_request")] = False
+        chat_prompt = "Please generate a Python code snippet using `plotly.express` to visualize the primary relationship in the current SQL result. The dataframe is available as `df`."
+        st.session_state.pilot_chat_messages.append({"role": "user", "content": "📈 *Requested Plotly Code*"})
+        with st.chat_message("user"): st.markdown("📈 *Requested Plotly Code*")
+    elif prompt_user_input:
+        chat_prompt = prompt_user_input
+        st.session_state.pilot_chat_messages.append({"role": "user", "content": chat_prompt})
+        with st.chat_message("user"): st.markdown(chat_prompt)
 
-    if prompt:
+    if chat_prompt:
             
         with st.chat_message("assistant"):
             with st.spinner("AI is analyzing..."):
@@ -270,8 +282,8 @@ def render_advanced_sql_terminal(sales_df: pd.DataFrame = None, returns_df: pd.D
                     import re
                     agent = LLMAgent()
                     ctx_df = st.session_state.get(KeyManager.get_key("pilot", "sql_result"), pd.DataFrame())
-                    recent_logs = "\n".join([re.sub(r'<[^>]+>', '', log) for log in st.session_state.pilot_term_logs[-5:]])
-                    schema_context = "\\n".join(schema_info)
+                    recent_logs = "\n".join([re.sub(r'<[^>]+>', '', log) for log in st.session_state.pilot_term_logs[-5:]]) # Clean HTML from logs
+                    schema_context = "\n".join(schema_info) # Corrected escaping
                     
                     enhanced_prompt = f"""You are DEEN-BI Data Pilot, an expert e-commerce analyst and Python data scientist.
 Database Schema:
@@ -280,16 +292,16 @@ Database Schema:
 Recent Terminal Activity:
 {recent_logs}
 
-User Query: {prompt}
+User Query: {chat_prompt}
 
 If the user asks for a chart, graph, or visualization, you MUST provide a valid Python code snippet using `plotly.express`.
 The dataframe is available as `df`.
 Example:
-```python
+'''python
 import plotly.express as px
-fig = px.bar(df, x='Category', y='Revenue', title='Revenue by Category')
+fig = px.bar(df, x='category_column', y='value_column', title='Chart Title')
 fig.show()
-```
+'''
 Otherwise, provide a concise, professional analysis based on the user's query and the provided context.
 """
                     

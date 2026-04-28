@@ -561,9 +561,32 @@ MAP_FORCE_SNAPSHOT = False   # Map always uses snapshot
 
 ---
 
-## 15. Development Guidelines (from DEVELOPMENT.md)
+## 15. Feature Status Matrix
 
-### 15.1 Adding New Customer Insight Filters
+### ✅ Fully Operational
+- **WooCommerce API Sync**: Live & Background caching working efficiently via Polars/Pandas.
+- **Returns Tracking**: Google Sheets real-time integration with cross-referencing.
+- **Inventory Intelligence**: Restock forecasting, low stock alerts, and Orphan Stock detection.
+- **Customer RFM & Insights**: Lifetime value, loyalty tiering, cohort matrix, and deduplication.
+- **AutoML Forecasting**: Multi-tier ensemble model (ARIMA, Holt-Winters, Naive) with fallback.
+- **Data Pilot Terminal**: In-memory SQLite execution, Plotly code generation, and LLM chat.
+- **Power BI Export**: Multi-sheet Star Schema (.xlsx) generator.
+
+### ⚠️ Simulated / Mocked Data (Pending Integrations)
+- **Traffic & Acquisition**: Currently simulated using a synthetic 3.2% conversion rate. Pending native Google Analytics 4 (GA4) API integration.
+- **VIP Retention Notification**: The "Send Retention Notification" button in the War Room is a UI mockup pending SMS/WhatsApp Gateway integration.
+- **Local LLM Execution**: Deployed Streamlit Cloud apps block `localhost:11434` (Ollama). Native Chatbot defaults to Gemini API or simulated responses in cloud environments.
+
+### ❌ Deprecated / Removed
+- **Data Trust & Data Audit**: Removed entirely to reduce technical debt.
+- **Legacy Logistics Tabs**: Pathao, Steadfast, and Fuzzy Parser modules have been purged in favor of the unified operations ledger.
+- **Draggable Floating Chatbot**: Replaced with standard Streamlit native chat UI (`st.chat_message`) due to HTML rendering instabilities.
+
+---
+
+## 16. Development Guidelines (from DEVELOPMENT.md)
+
+### 16.1 Adding New Customer Insight Filters
 
 When extending the Customer Insight module with new filter criteria:
 

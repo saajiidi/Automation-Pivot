@@ -81,26 +81,26 @@ def render_district_map(df_sales: pd.DataFrame):
             template="plotly_dark"
         )
 
-    fig.update_geos(
-        projection_type="mercator",
-        visible=False,
-        bgcolor="rgba(0,0,0,0)"
-    )
-    
-    fig.update_layout(
-        height=600, # Increased height for "Full Map" feel
-        margin={"r":0,"t":40,"l":0,"b":0},
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        coloraxis_colorbar=dict(
-            thicknessmode="pixels", thickness=15,
-            lenmode="fraction", len=0.6,
-            yanchor="middle", y=0.5,
-            title=None
+        fig.update_geos(
+            projection_type="mercator",
+            visible=False,
+            bgcolor="rgba(0,0,0,0)"
         )
-    )
+        
+        fig.update_layout(
+            height=600, # Increased height for "Full Map" feel
+            margin={"r":0,"t":40,"l":0,"b":0},
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            coloraxis_colorbar=dict(
+                thicknessmode="pixels", thickness=15,
+                lenmode="fraction", len=0.6,
+                yanchor="middle", y=0.5,
+                title=None
+            )
+        )
 
-    st.plotly_chart(fig, width="stretch", key=KeyManager.get_key("geo", "district_choropleth"))
+        st.plotly_chart(fig, width="stretch", key=KeyManager.get_key("geo", "district_choropleth"))
     
     with gv2:
         st.markdown(f"#### 🔥 Top 20 Hotspots")
@@ -122,7 +122,7 @@ def render_district_map(df_sales: pd.DataFrame):
             xaxis=dict(showgrid=False),
             yaxis=dict(showgrid=False, categoryorder="total ascending")
         )
-    st.plotly_chart(fig_spot, width="stretch", key=KeyManager.get_key("geo", "top_hotspots_bar"))
+        st.plotly_chart(fig_spot, width="stretch", key=KeyManager.get_key("geo", "top_hotspots_bar"))
     
     # 📝 Summary Insight
     if not spot_raw.empty:
