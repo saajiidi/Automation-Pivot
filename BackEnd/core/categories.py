@@ -18,9 +18,9 @@ def get_category_for_orders(name) -> str:
 
 # Master Category Priority (Determines the 'Flow' in UI Dropdowns)
 CATEGORIES_PRIORITY = [
-    "Jeans", "Jeans - Regular Fit", "Jeans - Slim Fit", "Jeans - Straight Fit",
+    "Jeans - Regular Fit", "Jeans - Slim Fit", "Jeans - Straight Fit",
     "T-Shirt", "T-Shirt - HS T-Shirt", "T-Shirt - FS T-Shirt", "T-Shirt - Drop Shoulder", "T-Shirt - Tank Top", "T-Shirt - Active Wear", "T-Shirt - Jersey",
-    "FS Shirt", "FS Shirt - Flannel Shirt", "FS Shirt - Denim Shirt", "FS Shirt - Oxford Shirt", "FS Shirt - Kaftan Shirt", "FS Shirt - Executive Formal Shirt", "FS Shirt - FS Casual Shirt",
+    "FS Shirt", "FS Shirt - Flannel Shirt", "FS Shirt - Denim Shirt", "FS Shirt - Oxford Shirt", "FS Shirt - Kaftan Shirt", "FS Shirt - Formal Shirt", "FS Shirt - FS Casual Shirt",
     "HS Shirt", "HS Shirt - Contrast Shirt", "HS Shirt - HS Casual Shirt",
     "Wallet", "Wallet - Passport Holder", "Wallet - Card Holder", "Wallet - Long Wallet", "Wallet - Bifold Wallet", "Wallet - Trifold Wallet",
     "Panjabi", "Panjabi - Panjabi", "Panjabi - Embroidered Panjabi",
@@ -158,7 +158,7 @@ def get_category_for_sales(name) -> str:
         if _has_any(["denim"], name_str): return "FS Shirt - Denim Shirt"
         if _has_any(["oxford"], name_str): return "FS Shirt - Oxford Shirt"
         if _has_any(["kaftan"], name_str): return "FS Shirt - Kaftan Shirt"
-        if _has_any(["executive", "formal"], name_str): return "FS Shirt - Executive Formal Shirt"
+        if _has_any(["executive", "formal"], name_str): return "FS Shirt - Formal Shirt"
         if _has_any(["casual"], name_str): return "FS Shirt - FS Casual Shirt"
         return "FS Shirt"
 

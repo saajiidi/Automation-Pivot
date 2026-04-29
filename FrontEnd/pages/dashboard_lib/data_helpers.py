@@ -41,6 +41,7 @@ def get_available_filters(df: pd.DataFrame):
 
 def prune_dataframe(df: pd.DataFrame, preferred_columns: list[str]) -> pd.DataFrame:
     sales = ensure_sales_schema(df)
+    
     # Ensure all preferred columns exist, fill missing with pd.NA
     for col in preferred_columns:
         if col not in sales.columns:
