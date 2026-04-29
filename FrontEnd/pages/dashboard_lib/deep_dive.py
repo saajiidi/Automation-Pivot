@@ -318,16 +318,50 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
         st.caption(f"Generate a professional multi-sheet intelligence report for the **{len(w_df):,}** items in this selection.")
     with rd2:
         from datetime import datetime
+        
+        cluster_return_loss = w_df["Return_Loss"].sum() if "Return_Loss" in w_df.columns else 0
+        cluster_net_rev = total_revenue - cluster_return_loss
+        
         # 1. Prepare Strategic Summary Sheet
         summary_data = {
-            "Metric": ["Gross Revenue", "Total Units", "Unique Buyers", "Avg Item Price", "Single Piece Propensity", "Bulk Propensity (3+)"],
+            "Metric": [
+                "Gross Revenue", 
+                "Return Loss",
+                "Net Revenue",
+                "Total Orders", 
+                "Total Units", 
+                "Unique Buyers", 
+                "Avg Item Price", 
+                "Single Piece Propensity (1)", 
+                "Mid-Tier Propensity (2)", 
+                "Bulk Propensity (3+)",
+                "Top Variation"
+            ],
             "Value": [
                 f"৳{total_revenue:,.0f}", 
+                f"৳{cluster_return_loss:,.0f}",
+                f"৳{cluster_net_rev:,.0f}",
+                total_orders_in_cluster,
                 total_items_sold, 
                 unique_customers, 
                 f"৳{avg_item_price:,.0f}",
                 f"{p_single:.1f}%" if isinstance(p_single, (int, float)) else p_single,
-                f"{p_bulk:.1f}%" if isinstance(p_bulk, (int, float)) else p_bulk
+                f"{p_other:.1f}%" if isinstance(p_other, (int, float)) else p_other,
+                f"{p_bulk:.1f}%" if isinstance(p_bulk, (int, float)) else p_bulk,
+                top_var_display
+            ],
+            "Trend vs Prev": [
+                d_rev_label,
+                "-",
+                "-",
+                "-",
+                d_items_label,
+                d_cust_label,
+                d_price_label,
+                "-",
+                "-",
+                "-",
+                "-"
             ]
         }
         summary_df = pd.DataFrame(summary_data)
