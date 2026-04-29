@@ -210,16 +210,12 @@ def render_returns_tracker_page() -> None:
     ])
 
     with tab_dash:
-        show_exact = st.session_state.get(KeyManager.get_key("returns", "show_exact"), False)
+        show_exact = st.session_state.get("global_show_exact", False)
 
         # ── KPI Cards ──
         _render_kpi_cards(metrics, show_exact=show_exact)
         _render_financial_impact_summary(metrics, show_exact=show_exact)
         
-        t_col1, t_col2 = st.columns([8, 2])
-        with t_col2:
-            st.toggle("Show Exact Values", key=KeyManager.get_key("returns", "show_exact"))
-
         if df.empty:
             st.info("No returns logged within this specific time frame.")
         else:
@@ -491,7 +487,7 @@ def _render_financial_impact_summary(metrics: dict, show_exact: bool = False) ->
                 hovermode="x unified",
                 legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center")
             )
-            st.plotly_chart(fig_gap, width="stretch")
+            st.plotly_chart(fig_gap, width="stretch", key=KeyManager.get_key("returns", "sales_integrity_gap"))
 
     confidence = metrics.get("attribution_confidence_pct", 0.0)
     matched_items = metrics.get("matched_returned_items", 0)
@@ -584,8 +580,8 @@ def _render_category_insights(metrics: dict) -> None:
         height=400,
         margin=dict(l=0, r=20, t=50, b=0),
     )
-    fig.update_traces(textposition='outside')
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_traces(textposition='outside') # Update traces moved before plotly_chart
+    st.plotly_chart(fig, use_container_width=True, key=KeyManager.get_key("returns", "category_yield_bar"))
 
     # Detailed table
     with st.expander("📊 Detailed Category Financials"):
@@ -639,7 +635,7 @@ def _render_monthly_trend(df: pd.DataFrame) -> None:
         legend=dict(orientation="h", y=-0.2),
         margin=dict(l=20, r=20, t=50, b=20),
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", key=KeyManager.get_key("returns", "monthly_issue_breakdown"))
 
     # Total trend line
     total_monthly = (
@@ -687,7 +683,7 @@ def _render_monthly_trend(df: pd.DataFrame) -> None:
         margin=dict(l=20, r=20, t=50, b=20),
         yaxis_title="Count",
     )
-    st.plotly_chart(fig2, width="stretch")
+    st.plotly_chart(fig2, width="stretch", key=KeyManager.get_key("returns", "issue_velocity_trend"))
 
 
 def _render_reason_charts(metrics: dict) -> None:
@@ -717,7 +713,7 @@ def _render_reason_charts(metrics: dict) -> None:
             font=dict(family="Inter, sans-serif"),
             margin=dict(l=20, r=20, t=50, b=20),
         )
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", key=KeyManager.get_key("returns", "reason_distribution_pie"))
 
     with c2:
         fig2 = px.bar(
@@ -736,7 +732,7 @@ def _render_reason_charts(metrics: dict) -> None:
             showlegend=False,
             yaxis=dict(autorange="reversed"),
         )
-        st.plotly_chart(fig2, width="stretch")
+        st.plotly_chart(fig2, width="stretch", key=KeyManager.get_key("returns", "reason_count_bar"))
 
 
 def _render_product_heatmap(df: pd.DataFrame) -> None:
@@ -790,7 +786,7 @@ def _render_product_heatmap(df: pd.DataFrame) -> None:
         margin=dict(l=20, r=20, t=50, b=20),
         height=max(400, len(pivot) * 30 + 100),
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", key=KeyManager.get_key("returns", "product_heatmap"))
 
 
 def _extract_product_category(details: str) -> str:
@@ -1095,8 +1091,8 @@ def _render_returned_items_list(df: pd.DataFrame) -> None:
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown("**📊 Return Reason Breakdown:**")
-                reason_df = reason_counts.reset_index()
-                reason_df.columns = ['Reason', 'Count']
+                reason_df = reason_counts.reset_index(name='Count')
+                reason_df = reason_df.rename(columns={'index': 'Reason', 'Return Reason': 'Reason'})
                 reason_df['% of Returns'] = (reason_df['Count'] / reason_df['Count'].sum() * 100).round(1)
                 st.dataframe(reason_df, width="stretch", hide_index=True)
 
@@ -1157,10 +1153,7 @@ def _render_details_table(df: pd.DataFrame, sales_df: pd.DataFrame) -> None:
 
     # Apply SKU mapping and item breakdown
     with st.spinner("Resolving Order Items..."):
-        display_df["Item Breakdown"] = display_df.apply(
-            lambda row: get_order_items_breakdown(row["order_id"], row["returned_items"], sales_df),
-            axis=1
-        )
+        display_df["Item Breakdown"] = get_order_items_breakdown(display_df, sales_df)
     
     # Format the items list for display
     def format_item_list(items):

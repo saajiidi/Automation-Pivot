@@ -446,7 +446,7 @@ def render_intelligence_hub_page():
     with c3:
         ui.icon_metric("Orders", format_compact(order_count), icon="🛒", delta=d_orders_label, delta_val=d_orders_val)
     with c4:
-        ui.icon_metric("Avg. Orders", format_compact(avg_orders_per_day), icon="📅", delta=d_avg_label, delta_val=d_avg_val)
+        ui.icon_metric("Orders/Days", format_compact(avg_orders_per_day), icon="📅", delta=d_avg_label, delta_val=d_avg_val)
     with c5:
         ui.icon_metric("Customers", format_compact(cust_count), icon="👥", delta=d_cust_label, delta_val=d_cust_val)
     with c6:
@@ -745,11 +745,10 @@ def render_data_pilot_page(sales_df: pd.DataFrame, stock_df: pd.DataFrame, custo
     """The AI-first command interface for natural language operations and Strategic Intelligence."""
     st.markdown('<div class="live-indicator"><span class="live-dot" style="background:#4f46e5; box-shadow: 0 0 10px #4f46e5;"></span>Intelligence Center Active | Data Pilot v11.0</div>', unsafe_allow_html=True)
     
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3 = st.tabs([
         "🚀 Ask Data Pilot", 
         "🚨 Strategic War-Room", 
-        "📦 Market Basket Intel",
-        "🛡️ Data Trust"
+        "📦 Market Basket Intel"
     ])
     
     with tab1:
@@ -785,13 +784,3 @@ def render_data_pilot_page(sales_df: pd.DataFrame, stock_df: pd.DataFrame, custo
                 st.dataframe(bundles, width="stretch", hide_index=True)
         else:
             st.info("Insufficient transaction density to discover complex product associations. Check back after more orders.")
-
-    with tab4:
-        from .dashboard_lib.audit import render_data_audit, render_data_trust_panel
-
-        st.markdown("### 🛡️ System Reliability Audit")
-        render_data_trust_panel(sales_df)
-        if customers_df is not None:
-            render_data_audit(sales_df, customers_df)
-        else:
-            st.warning("Customer data unavailable for deep audit.")
