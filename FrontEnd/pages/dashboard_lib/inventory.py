@@ -7,7 +7,7 @@ from itertools import combinations
 from collections import Counter
 from FrontEnd.components import ui
 from BackEnd.core.categories import get_category_for_sales, parse_sku_variants, get_clean_product_name, get_master_category_list, format_category_label, get_subcategory_name, classify_velocity_trend
-from BackEnd.commerce_ops.persistence import KeyManager
+from FrontEnd.utils.key_manager import KeyManager
 
 def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, df_sales: pd.DataFrame = None):
     c1, c2 = st.columns([3, 1])

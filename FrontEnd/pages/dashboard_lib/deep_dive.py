@@ -4,7 +4,7 @@ import plotly.express as px
 from FrontEnd.components import ui
 from BackEnd.core.categories import parse_sku_variants, get_clean_product_name, get_master_category_list, format_category_label, get_subcategory_name, classify_velocity_trend, get_densed_name
 from BackEnd.core.geo import get_region_display
-from BackEnd.commerce_ops.persistence import KeyManager
+from FrontEnd.utils.key_manager import KeyManager
 
 def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev: pd.DataFrame = None, window_label: str = "period"):
 
@@ -344,8 +344,30 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
         ]
         ai_df = pd.DataFrame({"AI Strategic Intelligence": [n for n in ai_narrative if n]})
         
+        # 4. Prepare SKU Performance Sheet
+        sku_perf_df = pd.DataFrame()
+        if "sku" in w_df.columns and "item_name" in w_df.columns:
+            agg_cols = {"Units_Sold": ("qty", "sum"), "Gross_Revenue": ("item_revenue", "sum")}
+            if "Return_Loss" in w_df.columns:
+                agg_cols["Return_Loss"] = ("Return_Loss", "sum")
+                
+            sku_perf_df = w_df.groupby(["sku", "item_name"]).agg(**agg_cols).reset_index()
+            
+            if "Return_Loss" not in sku_perf_df.columns:
+                sku_perf_df["Return_Loss"] = 0.0
+                
+            sku_perf_df["Net_Revenue"] = sku_perf_df["Gross_Revenue"] - sku_perf_df["Return_Loss"]
+            sku_perf_df = sku_perf_df.sort_values("Gross_Revenue", ascending=False)
+            
+            for col in ["Gross_Revenue", "Return_Loss", "Net_Revenue"]:
+                sku_perf_df[col] = sku_perf_df[col].apply(lambda x: f"৳{x:,.2f}")
+
+        additional_sheets = {"Summary": summary_df, "AI Insights": ai_df}
+        if not sku_perf_df.empty:
+            additional_sheets["SKU Performance"] = sku_perf_df
+
         from FrontEnd.components.data_display import export_to_excel
-        report_bytes = ui.export_to_excel(export_df, "Cluster Data", additional_sheets={"Summary": summary_df, "AI Insights": ai_df})
+        report_bytes = ui.export_to_excel(export_df, "Cluster Data", additional_sheets=additional_sheets)
         
         st.download_button(
             label="📊 Export Strategic Analysis",

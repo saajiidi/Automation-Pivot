@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 from .data_helpers import sum_order_level_revenue, build_order_level_dataset
-from BackEnd.commerce_ops.persistence import KeyManager
+from FrontEnd.utils.key_manager import KeyManager
 
 def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, ml_bundle: dict, time_window: str = "this period", df_prev_sales: pd.DataFrame = None, return_raw: bool = False):
     if df_sales.empty:

@@ -37,7 +37,7 @@ from BackEnd.services.customer_manager import (
     save_mapping,
     build_customer_mapping
 )
-from BackEnd.commerce_ops.persistence import KeyManager
+from FrontEnd.utils.key_manager import KeyManager
 
 from FrontEnd.components import ui
 from BackEnd.core.logging_config import get_logger

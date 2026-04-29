@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import requests
 import json
-from BackEnd.commerce_ops.persistence import KeyManager
+from FrontEnd.utils.key_manager import KeyManager
 
 @st.cache_resource
 def load_bangladesh_geojson():

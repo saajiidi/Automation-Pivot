@@ -41,7 +41,7 @@ from BackEnd.services.returns_tracker import (
 from FrontEnd.components import ui
 from FrontEnd.utils.config import DATA_SYNC_MODE
 from FrontEnd.utils.error_handler import log_error
-from BackEnd.commerce_ops.persistence import KeyManager
+from FrontEnd.utils.key_manager import KeyManager
 from BackEnd.core.logging_config import get_logger
 
 logger = get_logger("returns_tracker_page")

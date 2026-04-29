@@ -608,18 +608,61 @@ def render_intelligence_hub_page():
                 "Generated At": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
+            # Prepare export base dataframe with Return Loss mapping
+            base_df = data["sales_active"].copy()
+            if "Return_Loss" not in base_df.columns:
+                returns_df = st.session_state.get("returns_data", pd.DataFrame())
+                order_sku_returns = {}
+                if not returns_df.empty and "order_id" in returns_df.columns:
+                    for _, r_row in returns_df.iterrows():
+                        if r_row.get("issue_type") in ["Paid Return", "Non Paid Return", "Partial"]:
+                            items = r_row.get("returned_items", [])
+                            oid = str(r_row.get("order_id", ""))
+                            if isinstance(items, list):
+                                for item in items:
+                                    if isinstance(item, dict):
+                                        sku = str(item.get("sku", "N/A"))
+                                        impact = item.get("revenue_impact", 0)
+                                        key = f"{oid}_{sku}"
+                                        order_sku_returns[key] = order_sku_returns.get(key, 0) + impact
+                keys = base_df["order_id"].astype(str) + "_" + base_df.get("sku", "").astype(str)
+                base_df["Return_Loss"] = keys.map(order_sku_returns).fillna(0.0)
+
             # Additional analysis: Top Categories
             from BackEnd.core.categories import get_subcategory_name
-            cat_df = data["sales_active"].copy()
+            cat_df = base_df.copy()
             cat_df["Sub-Category"] = cat_df["Category"].apply(get_subcategory_name)
-            top_cats = cat_df.groupby("Sub-Category")["item_revenue"].sum().reset_index().sort_values("item_revenue", ascending=False).head(10)
+            top_cats = cat_df.groupby("Sub-Category").agg(Gross_Revenue=("item_revenue", "sum"), Return_Loss=("Return_Loss", "sum")).reset_index()
+            top_cats["Net_Revenue"] = top_cats["Gross_Revenue"] - top_cats["Return_Loss"]
+            top_cats = top_cats.sort_values("Gross_Revenue", ascending=False).head(10)
             
+            for col in ["Gross_Revenue", "Return_Loss", "Net_Revenue"]:
+                top_cats[col] = top_cats[col].apply(lambda x: f"৳{x:,.2f}")
+            
+            # SKU Performance Analysis
+            sku_perf = pd.DataFrame()
+            if "sku" in base_df.columns and "item_name" in base_df.columns:
+                sku_perf = base_df.groupby(["sku", "item_name"]).agg(
+                    Units_Sold=("qty", "sum"),
+                    Gross_Revenue=("item_revenue", "sum"),
+                    Return_Loss=("Return_Loss", "sum")
+                ).reset_index()
+                
+                sku_perf["Net_Revenue"] = sku_perf["Gross_Revenue"] - sku_perf["Return_Loss"]
+                sku_perf = sku_perf.sort_values("Gross_Revenue", ascending=False)
+                
+                for col in ["Gross_Revenue", "Return_Loss", "Net_Revenue"]:
+                    sku_perf[col] = sku_perf[col].apply(lambda x: f"৳{x:,.2f}")
+
             ai_insights = pd.DataFrame({"Executive Narrative & Intelligence Briefing": all_points})
             
             additional_sheets = {
                 "Top Categories": top_cats,
                 "AI Briefing": ai_insights
             }
+            
+            if not sku_perf.empty:
+                additional_sheets["SKU Performance"] = sku_perf
             
             if data.get("ml") and "forecast" in data["ml"]:
                 fc = data["ml"]["forecast"]

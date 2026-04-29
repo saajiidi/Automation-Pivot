@@ -6,7 +6,7 @@ from BackEnd.services.strategic_intelligence import (
     calculate_rfm_churn_risk
 )
 from BackEnd.commerce_ops.ui_components import anomaly_alert_card
-from BackEnd.commerce_ops.persistence import KeyManager
+from FrontEnd.utils.key_manager import KeyManager
 
 def render_war_room_page(sales_df: pd.DataFrame, returns_df: pd.DataFrame):
     """Business Intelligence War-Room for pro-active anomaly detection and strategy."""
